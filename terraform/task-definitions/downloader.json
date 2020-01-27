@@ -3,6 +3,16 @@
     "name": "hls-sentinel2-downloader",
     "image": "${image}",
     "command": ["python", "start.py"],
+    "environment": [
+      {
+        "name": "COPERNICUS_USERNAME",
+        "value": "${copernicus_username}"
+      },
+      {
+        "name": "COPERNICUS_PASSWORD",
+        "value": "${copernicus_password}"
+      }
+    ],
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {

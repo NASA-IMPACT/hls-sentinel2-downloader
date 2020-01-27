@@ -1,0 +1,3 @@
+requests==2.22
+aria2p==0.7
+boto3==1.11

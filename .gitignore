@@ -4,6 +4,9 @@
 # Local .terraform directories
 **/.terraform/*
 
+# Variables
+conf.auto.tfvars.json
+
 # .tfstate files
 *.tfstate
 *.tfstate.*
