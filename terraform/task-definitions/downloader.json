@@ -1,0 +1,15 @@
+[
+  {
+    "name": "hls-sentinel2-downloader",
+    "image": "${image}",
+    "command": ["python", "start.py"],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "${log_group}",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }
+]
