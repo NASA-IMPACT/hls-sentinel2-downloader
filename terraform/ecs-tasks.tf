@@ -4,6 +4,7 @@ data "template_file" "downloader" {
   vars = {
     image = aws_ecr_repository.downloader.repository_url
     log_group = aws_cloudwatch_log_group.downloader.name
+    upload_bucket = aws_s3_bucket.upload_bucket.id
     copernicus_username = var.copernicus_username
     copernicus_password = var.copernicus_password
   }

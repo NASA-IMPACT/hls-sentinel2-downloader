@@ -8,6 +8,8 @@ WORKDIR /code
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
 
-# ENTRYPOINT ["/code/init.sh"]
+COPY ./init.sh .
+ENTRYPOINT ["/code/init.sh"]
+
 COPY ./src/ /code/
 CMD ["python", "start.py"]

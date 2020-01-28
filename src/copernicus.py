@@ -11,6 +11,7 @@ from requests.auth import HTTPBasicAuth
 class Copernicus:
     """
     Handler to fetch Sentinel-2 data urls.
+
     It uses the search API to fetch N (default=100) entries per request
     and makes multiple requests until no more data is available.
     """
@@ -26,9 +27,9 @@ class Copernicus:
         rows_per_query=100
     ):
         """
-        start_date: Minimum ingestion date for returned urls in ISO8061 format.
-        end_date: Maximum ingestion date for returned urls in ISO8061 format.
-        platform_name: Platform name to search for in data hub archive.
+        start_date: Minimum ingestion date for searching.
+        end_date: Maximum ingestion date for searching.
+        platform_name: Platform name to search for in the data hub archive.
                        Defaults to 'Sentinel-2' for Sentinel-2 data.
         rows_per_query: Number of rows to return in each request.
                         Defaults to 100.
@@ -51,7 +52,6 @@ class Copernicus:
             environ['COPERNICUS_USERNAME'],
             environ['COPERNICUS_PASSWORD']
         )
-        print(environ['COPERNICUS_USERNAME'])
 
     def read_feed(self):
         """
@@ -73,7 +73,6 @@ class Copernicus:
 
             if response.status_code == 200:
                 feed = response.json()['feed']
-                print(feed)
 
                 if 'opensearch:totalResults' not in feed or \
                         'entry' not in feed:

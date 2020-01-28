@@ -11,6 +11,10 @@
       {
         "name": "COPERNICUS_PASSWORD",
         "value": "${copernicus_password}"
+      },
+      {
+        "name": "UPLOAD_BUCKET",
+        "value": "${upload_bucket}"
       }
     ],
     "logConfiguration": {
