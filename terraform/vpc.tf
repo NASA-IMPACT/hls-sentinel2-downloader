@@ -1,17 +1,22 @@
-resource "aws_vpc" "main" {
+resource "aws_vpc" "downloader" {
   cidr_block = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support = true
+
+  tags = {
+    Name = "${terraform.workspace}-downloader"
+  }
 }
 
-resource "aws_security_group" "main" {
-  vpc_id = aws_vpc.main.id
+resource "aws_security_group" "downloader" {
+  vpc_id = aws_vpc.downloader.id
 
+  // Allow all inbound.
   ingress {
-    protocol = "-1"
     from_port = 0
     to_port = 0
-    self = true
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   // Allow all outbound.
@@ -23,17 +28,11 @@ resource "aws_security_group" "main" {
   }
 }
 
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-}
-
-resource "aws_eip" "main" {
+resource "aws_eip" "downloader" {
   vpc = true
-  depends_on = [aws_internet_gateway.main]
+  instance = aws_instance.downloader.id
 }
 
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.main.id
-  subnet_id = aws_subnet.public_subnets[0].id
-  depends_on = [aws_internet_gateway.main]
+resource "aws_internet_gateway" "downloader" {
+  vpc_id = aws_vpc.downloader.id
 }

@@ -88,5 +88,5 @@ class Copernicus:
                 total_fetched_entries += fetched_entries
                 start += fetched_entries
 
-            if (total_fetched_entries >= total_results):
-                break
+                if (total_fetched_entries >= total_results):
+                    break

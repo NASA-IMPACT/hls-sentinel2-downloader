@@ -8,7 +8,7 @@ aria2c --max-concurrent-downloads=15 \
        --enable-rpc \
        --rpc-listen-all \
        --enable-rpc \
-        --dir=/code/downloads \
+        --dir=$DOWNLOADS_PATH \
        -D
 
 
