@@ -35,9 +35,9 @@ def main():
         lock.acquire()
         global total_downloads
         total_downloads += 1
-        lock.release()
         if total_downloads == max_downloads:
             upload_queue.put('DONE')
+        lock.release()
 
     # After each file downloads, we want to upload it to S3 bucket.
     def on_download_complete(downloader, gid, lock):
@@ -48,9 +48,9 @@ def main():
         lock.acquire()
         global total_downloads
         total_downloads += 1
-        lock.release()
         if total_downloads == max_downloads:
             upload_queue.put('DONE')
+        lock.release()
 
     # Downloader that handles asynchronous downloads.
     downloader = Downloader(

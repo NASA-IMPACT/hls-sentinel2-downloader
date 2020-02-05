@@ -4,7 +4,7 @@ Created On: Jan 28, 2020
 Created By: Bibek Dahal
 """
 from os import path
-from boto3 import client
+from boto3 import client, s3
 
 
 class S3Uploader:
@@ -17,6 +17,12 @@ class S3Uploader:
         """
         self.client = client('s3')
         self.bucket = bucket
+        self.transfer_config = s3.transfer.TransferConfig(
+            multipart_threshold=1024 * 25,
+            max_concurrency=10,
+            multipart_chunksize=1024 * 25,
+            use_threads=True,
+        )
 
     def upload_file(self, filename, key=None):
         """
@@ -28,4 +34,5 @@ class S3Uploader:
         """
         if key is None:
             key = path.basename(filename)
-        self.client.upload_file(filename, self.bucket, key)
+        self.client.upload_file(filename, self.bucket, key,
+                                Config=self.transfer_config)
