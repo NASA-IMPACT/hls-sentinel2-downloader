@@ -4,6 +4,7 @@ Created On: Jan 28, 2020
 Created By: Bibek Dahal
 """
 import aria2p
+from hashlib import md5
 
 
 class Downloader:
@@ -42,20 +43,41 @@ class Downloader:
             on_download_error=self._handle_download_error,
             on_download_complete=self._handle_download_complete,
         )
+        self.downloading_products = {}
 
-    def start_download(self, url):
+    def start_download(self, product):
         """
         Start a new download. This method is asynchronous.
 
         url: URL to download from.
         """
-        self.aria.add_uris([url])
+        # TODO: We can enable check_integrity and set checksum
+        # to retry downloading when checksum is invalid for downloaded file.
+        download = self.aria.add_uris([product.get_download_link()])
+        self.downloading_products[download.gid] = product
 
     def get_download_filename(self, gid):
         """
         Get the path of a download file from given id.
         """
         return str(self.aria.get_download(gid).files[0].path)
+
+    def get_download_product(self, gid):
+        """
+        Get the corresponding copernicus product for this download.
+        """
+        return self.downloading_products[gid]
+
+    def check_checksum(self, gid):
+        """
+        Validate the checksum of downloading file.
+        """
+        product = self.downloading_products[gid]
+        checksum = product.get_checksum()
+        checksum_download = md5(
+            open(self.get_download_filename(gid), 'rb').read()
+        ).hexdigest()
+        return checksum.upper() == checksum_download.upper()
 
     def get_download_error(self, gid):
         """
@@ -77,7 +99,11 @@ class Downloader:
     def _handle_download_error(self, aria, gid):
         if self.on_download_error is not None:
             self.on_download_error(self, gid, *self.callback_args)
+        if gid in self.downloading_products:
+            del self.downloading_products[gid]
 
     def _handle_download_complete(self, aria, gid):
         if self.on_download_complete is not None:
             self.on_download_complete(self, gid, *self.callback_args)
+        if gid in self.downloading_products:
+            del self.downloading_products[gid]

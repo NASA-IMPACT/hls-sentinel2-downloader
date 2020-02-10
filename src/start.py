@@ -17,11 +17,13 @@ def upload_worker(queue):
             break
 
         filename = message
+        print(f'Uploading: {filename}')
         uploader.upload_file(filename)
         remove(filename)
+        print(f'Uploaded: {filename}')
 
 
-max_downloads = 30
+max_downloads = environ.get('MAX_DOWNLOADS', 30)
 total_downloads = 0
 
 
@@ -41,6 +43,7 @@ def main():
 
     # After each file downloads, we want to upload it to S3 bucket.
     def on_download_complete(downloader, gid, lock):
+        # checksum_valid = downloader.check_checksum(gid)
         filename = downloader.get_download_filename(gid)
         print(f'Download complete: {filename}')
         upload_queue.put(filename)
@@ -71,10 +74,10 @@ def main():
     start_time = time()
     print('Starting downloads', start_time, flush=True)
     # Let's read in each url and download them.
-    for entry in islice(copernicus.read_feed(), max_downloads):
-        url = entry['link'][0]['href']
+    for product in islice(copernicus.read_feed(), max_downloads):
+        url = product.get_download_link()
         print(f'Downloading: {url}')
-        downloader.start_download(url)
+        downloader.start_download(product)
 
     upload_process.join()
     downloader.stop_listening()

@@ -3,9 +3,8 @@ copernius.py
 Created On: Jan 27, 2020
 Created By: Bibek Dahal
 """
-from os import environ
 from requests import get
-from requests.auth import HTTPBasicAuth
+from product import Product
 
 
 class Copernicus:
@@ -38,7 +37,6 @@ class Copernicus:
         # Build the query for Sentinel-2 datasets for given time period.
         query = f'(platformname:{platform_name}) AND ' \
                 f'ingestiondate:[{start_date} TO {end_date}]'
-        print(query)
 
         # Collect the query params.
         self.params = {
@@ -46,12 +44,6 @@ class Copernicus:
             'rows': rows_per_query,
             'format': 'json',
         }
-
-        # Create the authentication header.
-        self.auth = HTTPBasicAuth(
-            environ['COPERNICUS_USERNAME'],
-            environ['COPERNICUS_PASSWORD']
-        )
 
     def read_feed(self):
         """
@@ -69,7 +61,7 @@ class Copernicus:
                 **self.params,
                 'start': start,
             }
-            response = get(Copernicus.URL, params=params, auth=self.auth)
+            response = get(Copernicus.URL, params=params, auth=Product.AUTH)
 
             if response.status_code == 200:
                 feed = response.json()['feed']
@@ -83,7 +75,10 @@ class Copernicus:
                 entries = feed['entry']
                 fetched_entries = len(entries)
 
-                yield from entries
+                yield from [
+                    Product(entry['id'], entry['title'])
+                    for entry in entries
+                ]
 
                 total_fetched_entries += fetched_entries
                 start += fetched_entries
