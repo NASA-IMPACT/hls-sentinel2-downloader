@@ -8,23 +8,26 @@ from s3_uploader import S3Uploader
 from downloader import Downloader
 
 
-def upload_worker(queue):
+def upload_worker(queue, worker_id):
     # Uploader to the S3 bucket.
     uploader = S3Uploader(bucket=environ['UPLOAD_BUCKET'])
     while True:
         message = queue.get()
         if message == 'DONE':
+            # Put in back for other workers.
+            queue.put('DONE')
             break
 
         filename = message
-        print(f'Uploading: {filename}')
+        print(f'Uploading: {filename} by #{worker_id}')
         uploader.upload_file(filename)
         remove(filename)
         print(f'Uploaded: {filename}')
 
 
-max_downloads = environ.get('MAX_DOWNLOADS', 30)
+max_downloads = int(environ.get('MAX_DOWNLOADS', 30))
 total_downloads = 0
+max_upload_workers = int(environ.get('MAX_UPLOADERS', 20))
 
 
 def main():
@@ -68,8 +71,11 @@ def main():
         end_date='2020-01-29T00:00:00.000Z'
     )
 
-    upload_process = Process(target=upload_worker, args=(upload_queue,))
-    upload_process.start()
+    upload_processes = [
+        Process(target=upload_worker, args=(upload_queue, i))
+        for i in range(max_upload_workers)
+    ]
+    [upload_process.start() for upload_process in upload_processes]
 
     start_time = time()
     print('Starting downloads', start_time, flush=True)
@@ -79,7 +85,7 @@ def main():
         print(f'Downloading: {url}')
         downloader.start_download(product)
 
-    upload_process.join()
+    [upload_process.join() for upload_process in upload_processes]
     downloader.stop_listening()
 
     end_time = time()
