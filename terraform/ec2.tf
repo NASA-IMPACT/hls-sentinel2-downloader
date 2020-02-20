@@ -26,6 +26,7 @@ data "template_file" "startup_script" {
     COPERNICUS_PASSWORD = var.copernicus_password
     UPLOAD_BUCKET = aws_s3_bucket.upload_bucket.id
     DOCKER_IMAGE = aws_ecr_repository.downloader.repository_url
+    DB_URL = "postgresql://${var.database_user}:${var.database_password}@${aws_db_instance.downloader.address}/${var.database_name}"
   }
 }
 

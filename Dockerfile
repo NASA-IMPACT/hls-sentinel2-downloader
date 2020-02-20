@@ -11,5 +11,6 @@ RUN pip install -r requirements.txt
 COPY ./init.sh .
 ENTRYPOINT ["/code/init.sh"]
 
-COPY ./src/ /code/
+COPY ./src/main/ /code/
+COPY ./src/db/* /code/
 CMD ["python", "start.py"]

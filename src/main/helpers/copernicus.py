@@ -4,7 +4,7 @@ Created On: Jan 27, 2020
 Created By: Bibek Dahal
 """
 from requests import get
-from product import Product
+from helpers.product import Product
 
 
 class Copernicus:
