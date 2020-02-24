@@ -20,4 +20,8 @@ echo 'export DOCKER_IMAGE=${DOCKER_IMAGE}' >> /home/ubuntu/.bash_profile
 echo 'export DB_URL=${DB_URL}' >> /home/ubuntu/.bash_profile
 
 echo "alias sudo='sudo '" >> /home/ubuntu/.bash_profile
-echo "alias run_docker='docker run -p 6800:6800 -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e UPLOAD_BUCKET=${UPLOAD_BUCKET} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}'" >> /home/ubuntu/.bash_profile
+
+DOCKER_CMD="docker run -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e UPLOAD_BUCKET=${UPLOAD_BUCKET} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
+echo "alias run_docker='$DOCKER_CMD'" >> /home/ubuntu/.bash_profile
+
+crontab -l | { cat; echo "30 0 * * * $DOCKER_CMD"; } | crontab -

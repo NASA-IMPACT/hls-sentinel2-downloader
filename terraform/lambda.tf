@@ -29,3 +29,24 @@ resource "aws_lambda_function" "reviewer" {
     "aws_iam_role_policy_attachment.lambda_role",
   ]
 }
+
+
+resource "aws_cloudwatch_event_rule" "reviewer_schedule" {
+  name                = "${terraform.workspace}-reviewer-schedule"
+  description         = "Fires sentinel-2 granules reviewer periodically"
+  schedule_expression = "rate(5 hours)"
+}
+
+resource "aws_cloudwatch_event_target" "reviewer_schedule_target" {
+  rule      = "${aws_cloudwatch_event_rule.reviewer_schedule.name}"
+  target_id = "lambda"
+  arn       = "${aws_lambda_function.reviewer.arn}"
+}
+
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_reviewer" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.reviewer.function_name}"
+  principal     = "events.amazonaws.com"
+  source_arn    = "${aws_cloudwatch_event_rule.reviewer_schedule.arn}"
+}
