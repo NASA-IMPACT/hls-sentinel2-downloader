@@ -39,8 +39,8 @@ resource "aws_instance" "downloader" {
   ami = data.aws_ami.ubuntu.id
   instance_type = "m5d.xlarge"
   key_name = aws_key_pair.deployer.key_name
-  security_groups = [aws_security_group.downloader.id]
-  subnet_id = aws_subnet.downloader.id
+  vpc_security_group_ids = [aws_security_group.downloader.id]
+  subnet_id = element(aws_subnet.downloader, 0).id
   iam_instance_profile = aws_iam_instance_profile.downloader_profile.name
   user_data = data.template_file.startup_script.rendered
 

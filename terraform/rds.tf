@@ -1,15 +1,15 @@
 resource "aws_db_subnet_group" "rds" {
-  subnet_ids = [aws_subnet.downloader.id]
+  subnet_ids = aws_subnet.downloader.*.id
 }
 
 resource "aws_security_group" "rds" {
-  vpc_id = "${aws_vpc.downloader.id}"
+  vpc_id = aws_vpc.downloader.id
 
   ingress {
     protocol = "tcp"
     from_port = 5432
     to_port = 5432
-    security_groups = ["${aws_security_group.downloader.id}"]
+    security_groups = [aws_security_group.downloader.id]
   }
 
   // Allow all outbound.

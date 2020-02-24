@@ -6,13 +6,13 @@ resource "aws_lambda_function" "reviewer" {
   timeout = 900
   memory_size = 1600
 
-  role = "${aws_iam_role.iam_for_lambda.arn}"
-  s3_bucket = "${aws_s3_bucket.lambda_bucket.id}"
+  role = aws_iam_role.iam_for_lambda.arn
+  s3_bucket = aws_s3_bucket.lambda_bucket.id
   s3_key = "reviewer.zip"
-  source_code_hash = "${filebase64sha256("../build/reviewer.zip")}"
+  source_code_hash = filebase64sha256("../build/reviewer.zip")
 
   vpc_config {
-    subnet_ids = [aws_subnet.downloader.id]
+    subnet_ids = aws_subnet.downloader.*.id
     security_group_ids = [aws_security_group.downloader.id]
   }
 
@@ -26,7 +26,7 @@ resource "aws_lambda_function" "reviewer" {
   }
 
   depends_on = [
-    "aws_iam_role_policy_attachment.lambda_role",
+    aws_iam_role_policy_attachment.lambda_role,
   ]
 }
 
@@ -38,15 +38,15 @@ resource "aws_cloudwatch_event_rule" "reviewer_schedule" {
 }
 
 resource "aws_cloudwatch_event_target" "reviewer_schedule_target" {
-  rule      = "${aws_cloudwatch_event_rule.reviewer_schedule.name}"
+  rule      = aws_cloudwatch_event_rule.reviewer_schedule.name
   target_id = "lambda"
-  arn       = "${aws_lambda_function.reviewer.arn}"
+  arn       = aws_lambda_function.reviewer.arn
 }
 
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_reviewer" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.reviewer.function_name}"
+  function_name = aws_lambda_function.reviewer.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = "${aws_cloudwatch_event_rule.reviewer_schedule.arn}"
+  source_arn    = aws_cloudwatch_event_rule.reviewer_schedule.arn
 }

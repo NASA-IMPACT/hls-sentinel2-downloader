@@ -1,5 +1,6 @@
 from multiprocessing import Process, Queue, Lock
 from datetime import datetime, timedelta
+from time import sleep
 
 from helpers.copernicus import Copernicus
 from helpers.downloader import Downloader
@@ -46,7 +47,8 @@ class Workflow:
 
         self.copernicus = Copernicus(
             start_date=start_date.isoformat(),
-            end_date=end_date.isoformat()
+            end_date=end_date.isoformat(),
+            rows_per_query=30,
         )
 
     def _get_start_date(self, default_start_date, end_date):
@@ -127,6 +129,9 @@ class Workflow:
             count += 1
             if self.max_downloads is not None and count >= self.max_downloads:
                 break
+
+            while count - self.total_downloads >= 30:
+                sleep(5)
 
         # Set max_downloads to actual number of downloads triggered.
         # This is needed so that we can send an DONE message to S3 uploader

@@ -156,3 +156,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Virtual-env
+v-env/

@@ -19,7 +19,10 @@ class GranuleValidator:
 
     def validate_all(self):
         granules = self.serializer.get_all(
-            params={'validated': False},
+            params={
+                'validated': False,
+                'download_status': DownloadStatus.SUCCESS,
+            },
             fields=['uuid', 'checksum']
         )
         for g in granules:

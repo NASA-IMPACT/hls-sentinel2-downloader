@@ -1,8 +1,9 @@
 
 resource "aws_subnet" "downloader" {
-  cidr_block = cidrsubnet(aws_vpc.downloader.cidr_block, 3, 1)
+  count = length(data.aws_availability_zones.available.names)
   vpc_id = aws_vpc.downloader.id
-  availability_zone = "us-east-1a"
+  cidr_block = "10.0.${count.index + length(data.aws_availability_zones.available.names)}.0/24"
+  availability_zone = element(data.aws_availability_zones.available.names, count.index)
 }
 
 resource "aws_route_table" "downloader" {
@@ -19,6 +20,7 @@ resource "aws_route_table" "downloader" {
 }
 
 resource "aws_route_table_association" "downloader-subnet-association" {
-  subnet_id = aws_subnet.downloader.id
+  count = length(data.aws_availability_zones.available.names)
+  subnet_id = aws_subnet.downloader[count.index].id
   route_table_id = aws_route_table.downloader.id
 }

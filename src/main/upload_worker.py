@@ -13,10 +13,11 @@ def upload_worker(queue, job_id, worker_id):
     # Uploader to the S3 bucket.
     db_connection = setup_db().connect()
     logger = Logger(db_connection, job_id)
+    bucket_name = environ.get('UPLOAD_BUCKET')
 
     try:
         logger.info(f'Creating S3 uploader #{worker_id}')
-        uploader = S3Uploader(bucket=environ.get('UPLOAD_BUCKET'))
+        uploader = S3Uploader(bucket=bucket_name)
         granule_serializer = Serializer(db_connection, granule)
 
         while True:
@@ -37,8 +38,9 @@ def upload_worker(queue, job_id, worker_id):
                 granule_serializer.put(product_id, {
                     'download_status': DownloadStatus.SUCCESS,
                     'downloaded_at': datetime.now(),
-                    'validaed': False,
+                    'validated': False,
                     'checksum': checksum,
+                    's3_location': f'{bucket_name}/filename'
                 })
 
                 logger.info(f'Uploading {product_id} at #{worker_id}',
