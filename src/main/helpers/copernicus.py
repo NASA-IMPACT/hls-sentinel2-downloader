@@ -1,5 +1,5 @@
 """
-copernius.py
+copernicus.py
 Created On: Jan 27, 2020
 Created By: Bibek Dahal
 """
@@ -43,6 +43,7 @@ class Copernicus:
             'q': query,
             'rows': rows_per_query,
             'format': 'json',
+            'orderby': 'ingestiondate'
         }
 
     def read_feed(self):
@@ -76,7 +77,11 @@ class Copernicus:
                 fetched_entries = len(entries)
 
                 yield from [
-                    Product(entry['id'], entry['title'])
+                    Product(
+                        entry['id'],
+                        entry['title'],
+                        entry['date'][0]['content']
+                    )
                     for entry in entries
                 ]
 

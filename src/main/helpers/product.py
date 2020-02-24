@@ -18,7 +18,7 @@ class Product:
         environ['COPERNICUS_PASSWORD']
     )
 
-    def __init__(self, id, title):
+    def __init__(self, id, title, ingestion_date):
         """
         id: Unique product id.
         title: Product title.
@@ -26,6 +26,7 @@ class Product:
         self.id = id
         self.title = title
         self.link = Product.URL.format(id)
+        self.ingestion_date = ingestion_date
         self.checksum = None
 
     def get_checksum(self):

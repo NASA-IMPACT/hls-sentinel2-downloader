@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import (
     Table, Column,
-    String, Integer, ForeignKey, Enum, Boolean
+    String, Integer, ForeignKey, Enum, Boolean, DateTime
 )
 from .metadata import metadata
 
@@ -12,12 +12,15 @@ class DownloadStatus(str, enum.Enum):
     SUCCESS = 'success'
     ERROR = 'error'
     INVALID = 'invalid'
+    ARCHIVED = 'archived'
 
 
 granule = Table(
     'granule', metadata,
-    Column('id', Integer, primary_key=True),
+    Column('uuid', String(256), primary_key=True),
     Column('title', String(512), nullable=False),
+    Column('copernicus_ingestion_date', DateTime),
+    Column('downloaded_at', DateTime),
     # Column('checksum', String(512)),
     Column('validated', Boolean(default=False), nullable=False),
 
