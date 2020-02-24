@@ -21,7 +21,7 @@ granule = Table(
     Column('title', String(512), nullable=False),
     Column('copernicus_ingestion_date', DateTime),
     Column('downloaded_at', DateTime),
-    # Column('checksum', String(512)),
+    Column('checksum', String(512)),
     Column('validated', Boolean, default=False, nullable=False),
 
     Column('downloader_job_id', Integer, ForeignKey('job.id')),

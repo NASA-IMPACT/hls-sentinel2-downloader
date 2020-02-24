@@ -1,5 +1,6 @@
 from io import StringIO
 from csv import DictReader
+from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import insert
 from filter import Filter
 
@@ -40,14 +41,21 @@ class Serializer:
         row = result.first()
         return row and dict(row.items())
 
-    def get_all(self, params=empty_params, order_by=None):
-        query = self.table.select()
+    def get_all(self, params=empty_params, order_by=None, fields=None):
+        if fields is None:
+            query = self.table.select()
+        else:
+            query = select(
+                [self.table.c[field] for field in fields]
+            )
         if order_by is not None:
             query = query.order_by(*parse_order_by(self.table, order_by))
         if len(params) > 0:
             query = query.where(Filter(self.table, params).compile())
         result = self.execute(query)
-        return list(dict(r.items()) for r in result)
+        for r in result:
+            yield(dict(r.items()))
+        # return list(dict(r.items()) for r in result)
 
     def get(self, id):
         pk_name = self.table.primary_key.columns.values()[0].name

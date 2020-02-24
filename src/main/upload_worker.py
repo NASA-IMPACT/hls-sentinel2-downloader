@@ -1,5 +1,6 @@
 from os import environ, remove
 from datetime import datetime
+import hashlib
 
 from helpers.s3_uploader import S3Uploader
 from helpers.logger import Logger
@@ -28,10 +29,16 @@ def upload_worker(queue, job_id, worker_id):
             product_id, filename = message
 
             try:
+                checksum = hashlib.md5(
+                    open(filename, 'rb').read()
+                ).hexdigest().upper()
+
                 # Download status = SUCCESS
                 granule_serializer.put(product_id, {
                     'download_status': DownloadStatus.SUCCESS,
                     'downloaded_at': datetime.now(),
+                    'validaed': False,
+                    'checksum': checksum,
                 })
 
                 logger.info(f'Uploading {product_id} at #{worker_id}',
