@@ -1,28 +1,32 @@
 from os import environ
 from time import sleep  # , time
 from multiprocessing import Process, Manager
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
+from helpers.logger import logger
 from setup_db import setup_db
 from serializer import Serializer
 from models.job import job, JobStatus
 from workflow import Workflow
 
 
+def get_default_date():
+    today = date.today()
+    yesterday = today + timedelta(days=-1)
+    return yesterday
+
+
 def start_workflow(shared_state, start_date=None, review_number=0):
     shared_state.job_id = None
     shared_state.completed = False
 
-    max_downloads = int(environ.get('MAX_DOWNLOADS', 30))
+    max_downloads = environ.get('MAX_DOWNLOADS')
     max_upload_workers = int(environ.get('MAX_UPLOADERS', 20))
 
     workflow = Workflow(
-        start_date or date.today(), review_number,
+        start_date or get_default_date(), review_number,
         max_downloads, max_upload_workers
     )
-
-    # start_time = time()
-    # print('Starting downloads', start_time, flush=True)
 
     try:
         workflow.start(shared_state)
@@ -33,16 +37,6 @@ def start_workflow(shared_state, start_date=None, review_number=0):
             job_serializer.put(shared_state.job_id, {
                 'status': JobStatus.FAILED,
             })
-
-    # end_time = time()
-    # print('Finishing downloads', end_time, flush=True)
-    # print('Total time', end_time - start_time, flush=True)
-
-
-def start_main_job(shared_state):
-    p = Process(target=start_workflow, args=(shared_state,))
-    p.start()
-    return p
 
 
 def start_missed_job(job_serializer, shared_state):
@@ -69,6 +63,12 @@ def start_missed_job(job_serializer, shared_state):
     return p
 
 
+def start_main_job(shared_state):
+    p = Process(target=start_workflow, args=(shared_state,))
+    p.start()
+    return p
+
+
 def main():
     manager = Manager()
     shared_state = manager.Namespace()
@@ -76,13 +76,15 @@ def main():
     db_connection = setup_db().connect()
     job_serializer = Serializer(db_connection, job)
 
+    # TODO: Check if today's job is already running.
+    # If so, just go with missed jobs.
     p = start_main_job(shared_state)
 
     end_time = datetime.now()\
         .replace(hour=23, minute=30, second=0, microsecond=0)
 
     while True:
-        sleep(30)
+        sleep(5)
 
         p.join(timeout=0)
         if not p.is_alive():

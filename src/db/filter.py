@@ -7,9 +7,9 @@ class Filter:
         self.params = params
 
     def _handle_clause(self, key, value):
-        field = self.table.c[key]
         if '.' in key:
             key, op = key.split('.')
+            field = self.table.c[key]
             if op == 'ge':
                 return field > value
             if op == 'le':
@@ -18,6 +18,7 @@ class Filter:
                 return field >= value
             if op == 'lte':
                 return field <= value
+        field = self.table.c[key]
         return field == value
 
     def compile(self):

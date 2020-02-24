@@ -20,10 +20,10 @@ job = Table(
     Column('end_time', DateTime),
 
     Column('date_handled', Date),
-    Column('needs_review', Boolean(default=True), nullable=False),
-    Column('review_number', Integer(default=0), nullable=False),
+    Column('needs_review', Boolean, default=True, nullable=False),
+    Column('review_number', Integer, default=0, nullable=False),
 
     Column('status', Enum(JobStatus), nullable=False,
-           server_default=(JobStatus.STARTED)),
+           default=(JobStatus.STARTED)),
     Column('error_summary', String(1024)),
 )

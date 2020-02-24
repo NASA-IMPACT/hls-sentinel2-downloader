@@ -22,10 +22,10 @@ granule = Table(
     Column('copernicus_ingestion_date', DateTime),
     Column('downloaded_at', DateTime),
     # Column('checksum', String(512)),
-    Column('validated', Boolean(default=False), nullable=False),
+    Column('validated', Boolean, default=False, nullable=False),
 
     Column('downloader_job_id', Integer, ForeignKey('job.id')),
     Column('s3_location', String(1024)),
     Column('download_status', Enum(DownloadStatus), nullable=False,
-           server_default=(DownloadStatus.NOT_STARTED)),
+           default=(DownloadStatus.NOT_STARTED)),
 )

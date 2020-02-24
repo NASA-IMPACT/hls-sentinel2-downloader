@@ -9,7 +9,7 @@ from serializer import Serializer
 
 def upload_worker(queue, worker_id):
     # Uploader to the S3 bucket.
-    uploader = S3Uploader(bucket=environ['UPLOAD_BUCKET'])
+    uploader = S3Uploader(bucket=environ.get('UPLOAD_BUCKET'))
     db_engine = setup_db()
     db_connection = db_engine.connect()
     granule_serializer = Serializer(db_connection, granule)

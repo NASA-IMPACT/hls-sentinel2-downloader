@@ -15,8 +15,10 @@ class S3Uploader:
         """
         bucket: Bucket name in S3 to upload files to.
         """
-        self.client = client('s3')
         self.bucket = bucket
+        if self.bucket is None:
+            return
+        self.client = client('s3')
         self.transfer_config = s3.transfer.TransferConfig(
             multipart_threshold=1024 * 25,
             max_concurrency=10,
@@ -32,6 +34,9 @@ class S3Uploader:
         key: S3 key (path).
              If None, key will be same as the basename of the local file.
         """
+        if self.bucket is None:
+            return
+
         if key is None:
             key = path.basename(filename)
         self.client.upload_file(filename, self.bucket, key,

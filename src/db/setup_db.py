@@ -3,7 +3,7 @@ from alembic import config as alembic_config
 from sqlalchemy import create_engine
 
 
-DB_URL = environ.get('DB_URL') or 'postgresql://postgres:admin123@localhost/postgres'  # noqa
+DB_URL = environ.get('DB_URL') or 'postgresql://postgres:postgres@localhost/postgres'  # noqa
 
 
 def setup_db():

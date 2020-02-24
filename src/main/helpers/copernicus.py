@@ -34,6 +34,13 @@ class Copernicus:
                         Defaults to 100.
         """
 
+        # Sometimes the dates only contain date part and not time.
+        # Fix it as the copernicus API needs time part as well.
+        if 'T' not in start_date:
+            start_date = start_date + 'T00:00:00Z'
+        if 'T' not in end_date:
+            end_date = end_date + 'T00:00:00Z'
+
         # Build the query for Sentinel-2 datasets for given time period.
         query = f'(platformname:{platform_name}) AND ' \
                 f'ingestiondate:[{start_date} TO {end_date}]'
@@ -43,7 +50,7 @@ class Copernicus:
             'q': query,
             'rows': rows_per_query,
             'format': 'json',
-            'orderby': 'ingestiondate'
+            'orderby': 'ingestiondate asc'
         }
 
     def read_feed(self):

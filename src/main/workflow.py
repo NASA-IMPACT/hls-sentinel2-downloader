@@ -1,5 +1,4 @@
 from multiprocessing import Process, Queue, Lock
-from itertools import islice
 from datetime import datetime, timedelta
 
 from helpers.copernicus import Copernicus
@@ -60,7 +59,7 @@ class Workflow:
                 'downloaded_at.gte': default_start_date,
                 'downloaded_at.le': end_date,
             },
-            order_by=[('copernicus_ingestion_date' 'desc')],
+            order_by=[('copernicus_ingestion_date', 'desc')],
         )
         if last_granule is None:
             return default_start_date
@@ -72,7 +71,7 @@ class Workflow:
             'job_name': 'Sentinel-2 Downloader',
             'start_time': datetime.now(),
             'date_handled': self.date,
-            'status': JobStatus.started,
+            'status': JobStatus.STARTED,
             'needs_review': True,
             'review_number': self.review_number,
         })
@@ -85,7 +84,7 @@ class Workflow:
 
         # Let's read in each url and download them.
         count = 0
-        for product in islice(self.copernicus.read_feed(), self.max_downloads):
+        for product in self.copernicus.read_feed():
             # Check if granule is already in the database.
             existing = self.granule_serializer.get(product.id)
 
@@ -109,12 +108,19 @@ class Workflow:
             self.downloader.start_download(product)
             count += 1
 
-        # We need to set max_downloads, if it was not provided by the user.
+            self.granule_serializer.put(product.id, {
+                'download_status': DownloadStatus.DOWNLOADING
+            })
+
+            if self.max_downloads is not None and count >= self.max_downloads:
+                break
+
+        print(count, self.date)
+        # Set max_downloads to actual number of downloads triggered.
         # This is needed so that we can send an DONE message to S3 uploader
         # when all download completes.
         self.lock.acquire()
-        if self.max_downloads is None:
-            self.max_downloads = count
+        self.max_downloads = count
         # Of course, if all downloads have already been completed at this
         # point, we need to handle that case as well.
         if self.total_downloads == self.max_downloads:
@@ -140,10 +146,7 @@ class Workflow:
         })
 
     def _on_download_start(self, downloader, gid, lock):
-        product = downloader.get_download_product(gid)
-        self.granule_serializer.put(product.id, {
-            'download_status': DownloadStatus.DOWNLOADING
-        })
+        pass
 
     def _on_download_error(self, downloader, gid, lock):
         print('Error downloading: ', *downloader.get_download_error(gid))

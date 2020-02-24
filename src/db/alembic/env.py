@@ -8,8 +8,8 @@ from alembic import context
 PARENT_PATH = os_path.join(os_path.abspath(os_path.dirname(__file__)), '..')
 sys_path.append(PARENT_PATH)
 
-from db.models.all import metadata  # noqa
-from db.setup_db import DB_URL  # noqa
+from models.all import metadata  # noqa
+from setup_db import DB_URL  # noqa
 
 # # this is the Alembic Config object, which provides
 # # access to the values within the .ini file in use.
@@ -23,7 +23,7 @@ from db.setup_db import DB_URL  # noqa
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

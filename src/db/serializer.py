@@ -8,16 +8,16 @@ empty_params = {}
 
 
 def parse_order_by(table, order_by):
-    if isinstance(order_by, 'str'):
+    if isinstance(order_by, str):
         return table.c[order_by].asc()
 
     result = []
     for ordering in order_by:
-        if isinstance(ordering, 'str'):
+        if isinstance(ordering, str):
             result.append(table.c[ordering].asc())
         else:
             field, order = ordering
-            result.append(table.c[field][order]())
+            result.append(getattr(table.c[field], order)())
     return result
 
 

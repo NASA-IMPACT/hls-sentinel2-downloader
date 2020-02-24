@@ -17,7 +17,7 @@ job_log = Table(
     Column('id', Integer, primary_key=True),
     Column('job_id', Integer, ForeignKey('job.id')),
     Column('log_level', Enum(LogLevel), nullable=False,
-           server_default=(LogLevel.INFO)),
+           default=(LogLevel.INFO)),
     Column('summary', String(512)),
     Column('details', Text),
 )
