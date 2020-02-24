@@ -5,53 +5,49 @@ from helpers.copernicus import Copernicus
 from helpers.downloader import Downloader
 from upload_worker import upload_worker
 
-from setup_db import setup_db
 from serializer import Serializer
 from models.job import job, JobStatus
-from models.job_log import job_log
 from models.granule import granule, DownloadStatus
 
 
 class Workflow:
     def __init__(self,
+                 db_connection, logger,
                  date, review_number=0,
                  max_downloads=None, max_upload_workers=20):
         self.max_downloads = max_downloads
+        self.max_upload_workers = max_upload_workers
         self.total_downloads = 0
         self.review_number = review_number
         self.upload_queue = Queue()
         self.lock = Lock()
 
         # Setup the database connection
-        self.db_engine = setup_db()
-        self.db_connection = self.db_engine.connect()
+        self.db_connection = db_connection
         self.job_serializer = Serializer(self.db_connection, job)
-        self.job_log_serializer = Serializer(self.db_connection, job_log)
         self.granule_serializer = Serializer(self.db_connection, granule)
+        self.logger = logger
+        self.date = date
+
+        self.logger.info('Creating a workflow')
 
         # Downloader that handles asynchronous downloads.
+        self.logger.info('Creating aria2 downloader client')
         self.downloader = Downloader(
-            on_download_start=self._on_download_start,
             on_download_error=self._on_download_error,
             on_download_complete=self._on_download_complete,
             callback_args=(self.lock,)
         )
 
         # Copernicus Search API
-        self.date = date
-        end_date = (date + timedelta(days=1))
-        start_date = self._get_start_date(date, end_date)
+        self.logger.info('Creating copernicus API connector')
+        end_date = (self.date + timedelta(days=1))
+        start_date = self._get_start_date(self.date, end_date)
 
         self.copernicus = Copernicus(
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat()
         )
-
-        # Upload workers
-        self.upload_processes = [
-            Process(target=upload_worker, args=(self.upload_queue, i))
-            for i in range(max_upload_workers)
-        ]
 
     def _get_start_date(self, default_start_date, end_date):
         last_granule = self.granule_serializer.first(
@@ -75,15 +71,31 @@ class Workflow:
             'needs_review': True,
             'review_number': self.review_number,
         })
+
+        self.logger.set_job_id(self.job_id)
+        self.logger.info('Starting workflow')
+
+        # Upload workers
+        self.logger.info('Creating S3 upload processes')
+        self.upload_processes = [
+            Process(target=upload_worker,
+                    args=(self.upload_queue, self.job_id, i))
+            for i in range(self.max_upload_workers)
+        ]
+
         parent_state.job_id = self.job_id
         self.at_least_one_failed_download = False
 
         # Start processes responsible for uploading downloaded files to S3
         # in a concurrent fashion.
+        self.logger.info('S3 upload processes started')
         [upload_process.start() for upload_process in self.upload_processes]
 
         # Let's read in each url and download them.
         count = 0
+        self.logger.info('Fetching granules info from Copernicus',
+                         f'Reading for date: {self.date.isoformat()}')
+
         for product in self.copernicus.read_feed():
             # Check if granule is already in the database.
             existing = self.granule_serializer.get(product.id)
@@ -103,19 +115,19 @@ class Workflow:
                 continue
 
             # And start the download.
-            # url = product.get_download_link()
-            # print(f'Downloading: {url}')
-            self.downloader.start_download(product)
-            count += 1
+            url = product.get_download_link()
+            self.logger.info(f'Starting granule download {product.id}',
+                             f'URL: {url}')
 
+            self.downloader.start_download(product)
             self.granule_serializer.put(product.id, {
                 'download_status': DownloadStatus.DOWNLOADING
             })
 
+            count += 1
             if self.max_downloads is not None and count >= self.max_downloads:
                 break
 
-        print(count, self.date)
         # Set max_downloads to actual number of downloads triggered.
         # This is needed so that we can send an DONE message to S3 uploader
         # when all download completes.
@@ -130,6 +142,8 @@ class Workflow:
         # Join the separately running upload processes.
         [upload_process.join() for upload_process in self.upload_processes]
 
+        self.logger.info('All granules downloaded',
+                         f'Total granules processed: {self.total_downloads}')
         parent_state.completed = True
 
         # At this point, we assume that all downloads and uploads have been
@@ -145,13 +159,15 @@ class Workflow:
             'status': JobStatus.SUCCESS
         })
 
-    def _on_download_start(self, downloader, gid, lock):
-        pass
+        self.logger.info('Stopping workflow')
+        self.logger.set_job_id(None)
 
     def _on_download_error(self, downloader, gid, lock):
-        print('Error downloading: ', *downloader.get_download_error(gid))
         product = downloader.get_download_product(gid)
 
+        error_message, error_code = downloader.get_download_error(gid)
+        self.logger.error(f'Download error {product.id}',
+                          f'Error Code: {error_code}\n{error_message}')
         self.at_least_one_failed_download = True
 
         # Download status = ERROR
@@ -168,6 +184,7 @@ class Workflow:
 
     def _on_download_complete(self, downloader, gid, lock):
         product = downloader.get_download_product(gid)
+        self.logger.info(f'Download complete {product.id}')
 
         # After each file downloads, we want to upload it to S3 bucket.
         filename = downloader.get_download_filename(gid)

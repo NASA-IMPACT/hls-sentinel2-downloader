@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import (
     Table, Column,
-    String, Integer, Text, ForeignKey, Enum,
+    String, Integer, Text, ForeignKey, Enum, DateTime,
 )
 from .metadata import metadata
 
@@ -15,6 +15,7 @@ class LogLevel(str, enum.Enum):
 job_log = Table(
     'job_log', metadata,
     Column('id', Integer, primary_key=True),
+    Column('logged_at', DateTime, nullable=False),
     Column('job_id', Integer, ForeignKey('job.id')),
     Column('log_level', Enum(LogLevel), nullable=False,
            default=(LogLevel.INFO)),
