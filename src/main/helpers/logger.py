@@ -32,7 +32,10 @@ class Logger:
         self.log(summary, details, LogLevel.ERROR)
 
     def exception(self):
-        etype, eval, tb = exc_info()
-        summary = str(eval)[:512]
-        details = traceback.format_exception(etype, eval, tb)
-        self.error(summary, details)
+        try:
+            etype, eval, tb = exc_info()
+            summary = str(eval)[:512]
+            details = traceback.format_exception(etype, eval, tb)
+            self.error(summary, details)
+        except Exception:
+            self.error('Exception occurred while catching exception.')

@@ -39,6 +39,7 @@ def start_workflow(shared_state, start_date=None, review_number=0):
             job_serializer = Serializer(db_connection, job)
             job_serializer.put(shared_state.job_id, {
                 'status': JobStatus.FAILED,
+                'needs_review': True,
             })
 
 
@@ -93,6 +94,18 @@ def run_downloader(db_connection, logger):
 
         p.join(timeout=0)
         if not p.is_alive():
+            job_id = shared_state.job_id
+            completed = shared_state.completed
+            if job_id is not None and not completed:
+                job_serializer.put(job_id, {
+                    'status': JobStatus.FAILED,
+                    'needs_review': True,
+                })
+
+            if p.exitcode != 0:
+                logger.error('Job exited unexpectedly',
+                             f'Exit code: {p.exitcode}\nJob id: {job_id}')
+
             p = start_missed_job(job_serializer, shared_state, logger)
             if p is None:
                 break
@@ -105,6 +118,7 @@ def run_downloader(db_connection, logger):
                 p.terminate()
                 job_serializer.put(job_id, {
                     'status': JobStatus.FAILED,
+                    'needs_review': True,
                 })
 
     logger.info('All jobs finished.')
