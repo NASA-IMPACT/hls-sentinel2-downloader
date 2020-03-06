@@ -12,7 +12,7 @@ from workflow import Workflow
 
 def get_default_date():
     today = date.today()
-    yesterday = today + timedelta(days=-3)
+    yesterday = today + timedelta(days=-10)
     return yesterday
 
 
@@ -99,52 +99,12 @@ def run_downloader(db_connection, logger):
     shared_state.default_date = get_default_date()
     shared_state.past_date = None
 
-    job_serializer = Serializer(db_connection, job)
+    # job_serializer = Serializer(db_connection, job)
 
     # TODO: Check if today's job is already running.
     # If so, just go with missed jobs.
     logger.info('Starting the main workflow')
     p = start_main_job(shared_state)
-
-    end_time = datetime.now()\
-        .replace(hour=23, minute=30, second=0, microsecond=0)
-
-    while True:
-        sleep(5)
-
-        p.join(timeout=0)
-        if not p.is_alive():
-            job_id = shared_state.job_id
-            completed = shared_state.completed
-            if job_id is not None and not completed:
-                job_serializer.put(job_id, {
-                    'status': JobStatus.FAILED,
-                    'needs_review': True,
-                })
-
-            if p.exitcode != 0:
-                logger.error('Job exited unexpectedly',
-                             f'Exit code: {p.exitcode}\nJob id: {job_id}')
-
-            if datetime.now() >= end_time:
-                break
-
-            # p = start_failed_job(job_serializer, shared_state, logger)
-            p = start_past_job(shared_state)
-            if p is None:
-                break
-
-        elif datetime.now() >= end_time:
-            job_id = shared_state.job_id
-            completed = shared_state.completed
-            if job_id is not None and not completed:
-                # Time to end.
-                p.terminate()
-                job_serializer.put(job_id, {
-                    'status': JobStatus.FAILED,
-                    'needs_review': True,
-                })
-
     logger.info('All jobs finished.')
 
 

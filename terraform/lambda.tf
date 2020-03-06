@@ -21,7 +21,7 @@ resource "aws_lambda_function" "reviewer" {
       DB_URL = "postgresql://${var.database_user}:${var.database_password}@${aws_db_instance.downloader.address}/${var.database_name}"
         COPERNICUS_USERNAME = var.copernicus_username
         COPERNICUS_PASSWORD = var.copernicus_password
-        UPLOAD_BUCKET = aws_s3_bucket.upload_bucket.id
+        UPLOAD_BUCKET = var.upload_bucket
     }
   }
 
