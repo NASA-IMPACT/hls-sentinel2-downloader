@@ -24,4 +24,4 @@ echo "alias sudo='sudo '" >> /home/ubuntu/.bash_profile
 DOCKER_CMD="docker run -d -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e UPLOAD_BUCKET=${UPLOAD_BUCKET} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
 echo "alias run_docker='$DOCKER_CMD'" >> /home/ubuntu/.bash_profile
 
-crontab -l | { cat; echo "30 0 * * * $DOCKER_CMD"; } | crontab -
+crontab -l | { cat; echo "15 0 * * * $DOCKER_CMD"; } | crontab -

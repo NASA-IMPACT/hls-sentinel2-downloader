@@ -23,6 +23,7 @@ class Copernicus:
         start_date,
         end_date,
         platform_name='Sentinel-2',
+        processing_level='Level-1C',
         rows_per_query=100
     ):
         """
@@ -43,6 +44,7 @@ class Copernicus:
 
         # Build the query for Sentinel-2 datasets for given time period.
         query = f'(platformname:{platform_name}) AND ' \
+                f'(processinglevel:{processing_level}) AND ' \
                 f'ingestiondate:[{start_date} TO {end_date}]'
 
         # Collect the query params.

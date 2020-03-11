@@ -8,7 +8,8 @@ class Filter:
 
     def _handle_clause(self, key, value):
         if isinstance(value, bool):
-            return key.is_(value)
+            field = self.table.c[key]
+            return field.is_(value)
         if '.' in key:
             key, op = key.split('.')
             field = self.table.c[key]

@@ -12,7 +12,7 @@ from workflow import Workflow
 
 def get_default_date():
     today = date.today()
-    yesterday = today + timedelta(days=-1)
+    yesterday = today + timedelta(days=-3)
     return yesterday
 
 
@@ -24,6 +24,8 @@ def start_workflow(shared_state, start_date=None, review_number=0):
     shared_state.completed = False
 
     max_downloads = environ.get('MAX_DOWNLOADS')
+    if max_downloads is not None:
+        max_downloads = int(max_downloads)
     max_upload_workers = int(environ.get('MAX_UPLOADERS', 20))
 
     try:
@@ -105,6 +107,9 @@ def run_downloader(db_connection, logger):
             if p.exitcode != 0:
                 logger.error('Job exited unexpectedly',
                              f'Exit code: {p.exitcode}\nJob id: {job_id}')
+
+            if datetime.now() >= end_time:
+                break
 
             p = start_missed_job(job_serializer, shared_state, logger)
             if p is None:

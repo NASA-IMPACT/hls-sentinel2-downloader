@@ -43,7 +43,7 @@ class Workflow:
         # Copernicus Search API
         self.logger.info('Creating copernicus API connector')
         end_date = (self.date + timedelta(days=1))
-        start_date = self._get_start_date(self.date, end_date)
+        start_date = self.date  # self._get_start_date(self.date, end_date)
 
         self.copernicus = Copernicus(
             start_date=start_date.isoformat(),
@@ -51,17 +51,17 @@ class Workflow:
             rows_per_query=30,
         )
 
-    def _get_start_date(self, default_start_date, end_date):
-        last_granule = self.granule_serializer.first(
-            params={
-                'downloaded_at.gte': default_start_date,
-                'downloaded_at.le': end_date,
-            },
-            order_by=[('copernicus_ingestion_date', 'desc')],
-        )
-        if last_granule is None:
-            return default_start_date
-        return last_granule['downloaded_at']
+    # def _get_start_date(self, default_start_date, end_date):
+    #     last_granule = self.granule_serializer.first(
+    #         params={
+    #             'downloaded_at.gte': default_start_date,
+    #             'downloaded_at.le': end_date,
+    #         },
+    #         order_by=[('copernicus_ingestion_date', 'desc')],
+    #     )
+    #     if last_granule is None:
+    #         return default_start_date
+    #     return last_granule['downloaded_at']
 
     def start(self, parent_state):
         # Start a new job in the database.
