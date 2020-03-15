@@ -7,6 +7,32 @@ from requests import get
 from helpers.product import Product
 
 
+def compile_tile_filter(args):
+    filter = ''
+    for i, arg in enumerate(args):
+        do_not = False
+        if arg[0] == '!':
+            do_not = True
+            arg = arg[1:]
+
+        f = None
+        if arg[0] == '(' and arg[-1] == ')':
+            f = compile_tile_filter(arg[1:-1].split(','))
+            f = f'({f})'
+        elif len(arg) > 1:
+            f = f'(filename:*T{arg}*)'
+        else:
+            f = f'(filename:*T??{arg}*)'
+        if do_not:
+            f = f'NOT{f}'
+        filter += f
+
+        if i < len(args) - 1:
+            filter += ' AND '
+
+    return filter
+
+
 class Copernicus:
     """
     Handler to fetch Sentinel-2 data urls.
@@ -18,12 +44,19 @@ class Copernicus:
     # Copernicus search URL
     URL = 'https://inthub2.copernicus.eu/dhus/search'
 
+    # Filter to exclude tiles over Antartica
+    DEFAULT_TILE_FILTER = [
+        '!A', '!B', '!C',
+        '!(E,!23E,!26E)'
+    ]
+
     def __init__(
         self,
         start_date,
         end_date,
         platform_name='Sentinel-2',
         processing_level='Level-1C',
+        tile_filter=DEFAULT_TILE_FILTER,
         rows_per_query=100
     ):
         """
@@ -46,6 +79,8 @@ class Copernicus:
         query = f'(platformname:{platform_name}) AND ' \
                 f'(processinglevel:{processing_level}) AND ' \
                 f'ingestiondate:[{start_date} TO {end_date}]'
+        if tile_filter is not None:
+            query = f'{query} AND {compile_tile_filter(tile_filter)}'
 
         # Collect the query params.
         self.params = {
