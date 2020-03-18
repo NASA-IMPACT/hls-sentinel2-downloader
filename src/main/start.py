@@ -16,7 +16,7 @@ def get_default_date():
     return yesterday
 
 
-def start_workflow(shared_state, start_date=None, review_number=0):
+def start_workflow(shared_state, start_date, review_number=0):
     db_connection = setup_db().connect()
     logger = Logger(db_connection)
 
@@ -31,7 +31,7 @@ def start_workflow(shared_state, start_date=None, review_number=0):
     try:
         workflow = Workflow(
             db_connection, logger,
-            start_date or get_default_date(), review_number,
+            start_date, review_number,
             max_downloads, max_upload_workers,
         )
         workflow.start(shared_state)
@@ -45,7 +45,7 @@ def start_workflow(shared_state, start_date=None, review_number=0):
             })
 
 
-def start_missed_job(job_serializer, shared_state, logger):
+def start_failed_job(job_serializer, shared_state, logger):
     logger.info('Checking for a missed job')
     failed_job = job_serializer.first(
         params={
@@ -71,8 +71,24 @@ def start_missed_job(job_serializer, shared_state, logger):
     return p
 
 
+def start_past_job(shared_state):
+    def_date = shared_state.default_date
+    if shared_state.past_date is None:
+        date = def_date + timedelta(days=-15)
+    else:
+        date = shared_state.past_date + timedelta(days=1)
+        if def_date == date:
+            return None
+
+    shared_state.past_date = date
+    p = Process(target=start_workflow, args=(shared_state, date))
+    p.start()
+    return p
+
+
 def start_main_job(shared_state):
-    p = Process(target=start_workflow, args=(shared_state,))
+    date = shared_state.default_date
+    p = Process(target=start_workflow, args=(shared_state, date))
     p.start()
     return p
 
@@ -80,6 +96,8 @@ def start_main_job(shared_state):
 def run_downloader(db_connection, logger):
     manager = Manager()
     shared_state = manager.Namespace()
+    shared_state.default_date = get_default_date()
+    shared_state.past_date = None
 
     job_serializer = Serializer(db_connection, job)
 
@@ -111,7 +129,8 @@ def run_downloader(db_connection, logger):
             if datetime.now() >= end_time:
                 break
 
-            p = start_missed_job(job_serializer, shared_state, logger)
+            # p = start_failed_job(job_serializer, shared_state, logger)
+            p = start_past_job(shared_state)
             if p is None:
                 break
 

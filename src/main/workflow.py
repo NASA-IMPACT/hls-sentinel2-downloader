@@ -51,18 +51,6 @@ class Workflow:
             rows_per_query=30,
         )
 
-    # def _get_start_date(self, default_start_date, end_date):
-    #     last_granule = self.granule_serializer.first(
-    #         params={
-    #             'downloaded_at.gte': default_start_date,
-    #             'downloaded_at.le': end_date,
-    #         },
-    #         order_by=[('copernicus_ingestion_date', 'desc')],
-    #     )
-    #     if last_granule is None:
-    #         return default_start_date
-    #     return last_granule['downloaded_at']
-
     def start(self, parent_state):
         # Start a new job in the database.
         self.job_id = self.job_serializer.post({

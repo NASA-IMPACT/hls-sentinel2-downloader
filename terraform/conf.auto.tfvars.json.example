@@ -1,0 +1,10 @@
+{
+  "copernicus_username": "",
+  "copernicus_password": "",
+  "public_key": "",
+  "database_allocated_storage": 10,
+  "database_instance_class": "db.t2.micro",
+  "database_name": "hls_db",
+  "database_password": "test",
+  "database_user": "test"
+}
