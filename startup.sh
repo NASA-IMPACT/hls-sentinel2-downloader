@@ -3,7 +3,7 @@
 apt update -y
 apt install -y docker docker.io awscli
 
-aws configure set region us-east-1
+aws configure set region us-west-2
 `aws ecr get-login --no-include-email`
 docker pull ${DOCKER_IMAGE}
 
