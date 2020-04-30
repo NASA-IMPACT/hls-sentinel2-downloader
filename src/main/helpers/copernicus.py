@@ -124,7 +124,7 @@ class Copernicus:
                     Product(
                         entry['id'],
                         entry['title'],
-                        entry['date'][0]['content']
+                        entry['date']
                     )
                     for entry in entries
                 ]

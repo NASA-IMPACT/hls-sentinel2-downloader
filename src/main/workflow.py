@@ -14,14 +14,15 @@ from models.granule import granule, DownloadStatus
 class Workflow:
     def __init__(self,
                  db_connection, logger,
-                 date, review_number=0,
-                 max_downloads=None, max_upload_workers=20):
+                 date,
+                 max_downloads=None, max_upload_workers=20,
+                 allow_repeat=False):
         self.max_downloads = max_downloads
         self.max_upload_workers = max_upload_workers
         self.total_downloads = 0
-        self.review_number = review_number
         self.upload_queue = Queue()
         self.lock = Lock()
+        self.allow_repeat = allow_repeat
 
         # Setup the database connection
         self.db_connection = db_connection
@@ -58,8 +59,6 @@ class Workflow:
             'start_time': datetime.now(),
             'date_handled': self.date,
             'status': JobStatus.STARTED,
-            'needs_review': True,
-            'review_number': self.review_number,
         })
 
         self.logger.set_job_id(self.job_id)
@@ -100,7 +99,8 @@ class Workflow:
                     'downloader_job_id': self.job_id,
                     'download_status': DownloadStatus.NOT_STARTED,
                 })
-            elif existing['download_status'] not in ['ERROR', 'INVALID']:
+            elif not self.allow_repeat and \
+                    existing['download_status'] not in ['ERROR', 'INVALID']:
                 # If it was not a failed download, just skip.
                 continue
 
@@ -148,7 +148,6 @@ class Workflow:
         # Set the job status to success.
         self.job_serializer.put(self.job_id, {
             'end_time': datetime.now(),
-            'needs_review': self.at_least_one_failed_download,
             'status': JobStatus.SUCCESS
         })
 

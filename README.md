@@ -5,6 +5,8 @@ A self-deployable application to run on cloud that parallelly fetches Sentinel-2
 
 ## Deploy Instructions
 
+ # TODO Add instructions to create workspace for terraform or use variable PROJECT_PREFIX
+
 First copy the file `terraform/conf.auto.tfvars.example` to `terraform/conf.auto.tfvars` and fill in the necessary values. You need to provide the Copenicus username and password as well as the public key for the ssh-key with which you want to deploy the EC2 instance. You can also modify the database settings as you like.
 
 After that, you are ready to deploy:

@@ -19,15 +19,6 @@ docker tag $DOCKER_TAG $ECR_URL
 docker push $ECR_URL
 echo "Docker image pushed"
 
-echo "Creating bucket for storing lambda functions"
-terraform apply -auto-approve --target=aws_s3_bucket.lambda_bucket
-echo "Bucket created"
-
-echo "Building and uploading the lambda functions"
-mkdir ../build -p
-./build_python_lambda.sh ../build/reviewer.zip ../src/reviewer
-echo "Lambda functions uploaded"
-
 echo "Deploying rest of the stack"
 terraform apply -auto-approve
 echo "Stack fully deployed"

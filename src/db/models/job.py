@@ -20,6 +20,8 @@ job = Table(
     Column('end_time', DateTime),
 
     Column('date_handled', Date),
+
+    # The following two fields are no longer used. They may be removed.
     Column('needs_review', Boolean, default=True, nullable=False),
     Column('review_number', Integer, default=0, nullable=False),
 

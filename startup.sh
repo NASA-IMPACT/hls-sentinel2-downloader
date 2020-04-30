@@ -13,15 +13,15 @@ mount /dev/nvme0n1 /mnt/files/
 
 
 
-echo 'export COPERNICUS_USERNAME=${COPERNICUS_USERNAME}' >> /home/ubuntu/.bash_profile
-echo 'export COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD}' >> /home/ubuntu/.bash_profile
-echo 'export UPLOAD_BUCKET=${UPLOAD_BUCKET}' >> /home/ubuntu/.bash_profile
-echo 'export DOCKER_IMAGE=${DOCKER_IMAGE}' >> /home/ubuntu/.bash_profile
-echo 'export DB_URL=${DB_URL}' >> /home/ubuntu/.bash_profile
+DOCKER_CMD="sudo docker run -d -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e UPLOAD_BUCKET=${UPLOAD_BUCKET} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
+echo $DOCKER_CMD >> /home/ubuntu/run_docker.sh
 
-echo "alias sudo='sudo '" >> /home/ubuntu/.bash_profile
+DOCKER_CMD_TEST="sudo docker run -d \$@ -e MAX_DOWNLOADS=100 -e DAYS_GAP=10 -e JUST_MAIN=TRUE -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
+echo $DOCKER_CMD_TEST >> /home/ubuntu/test_run.sh
 
-DOCKER_CMD="docker run -d -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e UPLOAD_BUCKET=${UPLOAD_BUCKET} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
-echo "alias run_docker='$DOCKER_CMD'" >> /home/ubuntu/.bash_profile
+DOCKER_CMD_TEST_REPEAT="sudo docker run -d \$@ -e ALLOW_REPEAT=TRUE -e DAYS_GAP=10 -e JUST_MAIN=TRUE -e DB_URL=${DB_URL} -e COPERNICUS_USERNAME=${COPERNICUS_USERNAME} -e COPERNICUS_PASSWORD=${COPERNICUS_PASSWORD} -e DOWNLOADS_PATH=/mnt/files -v /mnt/files:/mnt/files ${DOCKER_IMAGE}"
+echo $DOCKER_CMD_TEST_REPEAT >> /home/ubuntu/test_run_repeat.sh
 
-crontab -l | { cat; echo "15 0 * * * $DOCKER_CMD"; } | crontab -
+
+# Uncomment the following to run every day.
+# crontab -l | { cat; echo "15 0 * * * $DOCKER_CMD"; } | crontab -

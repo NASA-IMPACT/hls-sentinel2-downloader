@@ -11,8 +11,9 @@ from workflow import Workflow
 
 
 def get_default_date():
+    days_gap = int(environ.get('DAYS_GAP', 3))
     today = date.today()
-    yesterday = today + timedelta(days=-3)
+    yesterday = today + timedelta(days=-days_gap)
     return yesterday
 
 
@@ -31,8 +32,9 @@ def start_workflow(shared_state, start_date, review_number=0):
     try:
         workflow = Workflow(
             db_connection, logger,
-            start_date, review_number,
+            start_date,
             max_downloads, max_upload_workers,
+            environ.get('ALLOW_REPEAT', 'FALSE') == 'TRUE'
         )
         workflow.start(shared_state)
     except Exception:
@@ -41,34 +43,7 @@ def start_workflow(shared_state, start_date, review_number=0):
             job_serializer = Serializer(db_connection, job)
             job_serializer.put(shared_state.job_id, {
                 'status': JobStatus.FAILED,
-                'needs_review': True,
             })
-
-
-def start_failed_job(job_serializer, shared_state, logger):
-    logger.info('Checking for a missed job')
-    failed_job = job_serializer.first(
-        params={
-            'needs_review': True,    # Or should this be NOT STARTED
-        },
-        order_by=[
-            'review_number',
-            'start_time',
-        ]   # Find the earliest failed Job with least reviews yet.
-    )
-    if failed_job is None:
-        return None
-
-    date = failed_job['date_handled']
-    logger.info('Starting a missed workflow.')
-    p = Process(target=start_workflow,
-                args=(shared_state, date, failed_job['review_number'] + 1))
-    p.start()
-
-    job_serializer.put(failed_job['id'], {
-        'needs_review': False,
-    })
-    return p
 
 
 def start_past_job(shared_state):
@@ -106,6 +81,10 @@ def run_downloader(db_connection, logger):
     logger.info('Starting the main workflow')
     p = start_main_job(shared_state)
 
+    if environ.get('JUST_MAIN', False):
+        p.join()
+        return
+
     end_time = datetime.now()\
         .replace(hour=23, minute=30, second=0, microsecond=0)
 
@@ -119,7 +98,6 @@ def run_downloader(db_connection, logger):
             if job_id is not None and not completed:
                 job_serializer.put(job_id, {
                     'status': JobStatus.FAILED,
-                    'needs_review': True,
                 })
 
             if p.exitcode != 0:
@@ -129,7 +107,6 @@ def run_downloader(db_connection, logger):
             if datetime.now() >= end_time:
                 break
 
-            # p = start_failed_job(job_serializer, shared_state, logger)
             p = start_past_job(shared_state)
             if p is None:
                 break
@@ -142,7 +119,6 @@ def run_downloader(db_connection, logger):
                 p.terminate()
                 job_serializer.put(job_id, {
                     'status': JobStatus.FAILED,
-                    'needs_review': True,
                 })
 
     logger.info('All jobs finished.')
