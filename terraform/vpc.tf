@@ -4,7 +4,7 @@ resource "aws_vpc" "downloader" {
   enable_dns_support = true
 
   tags = {
-    Name = "${terraform.workspace}-downloader"
+    Name = "${var.project_prefix}-downloader"
   }
 }
 

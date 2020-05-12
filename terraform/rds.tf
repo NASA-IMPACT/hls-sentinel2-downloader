@@ -22,7 +22,7 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_instance" "downloader" {
-  identifier = "${terraform.workspace}-database"
+  identifier = "${var.project_prefix}-database"
   engine = "postgres"
   allocated_storage = var.database_allocated_storage
   instance_class = var.database_instance_class

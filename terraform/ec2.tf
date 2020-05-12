@@ -31,7 +31,7 @@ data "template_file" "startup_script" {
 }
 
 resource "aws_key_pair" "deployer" {
-  key_name = "${terraform.workspace}-deployer-key"
+  key_name = "${var.project_prefix}-deployer-key"
   public_key = var.public_key
 }
 
@@ -45,6 +45,6 @@ resource "aws_instance" "downloader" {
   user_data = data.template_file.startup_script.rendered
 
   tags = {
-    Name = "${terraform.workspace}-downloader"
+    Name = "${var.project_prefix}-downloader"
   }
 }

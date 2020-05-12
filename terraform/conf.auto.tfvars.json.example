@@ -1,4 +1,5 @@
 {
+  "project_prefix": "hls-sentinel2",
   "copernicus_username": "",
   "copernicus_password": "",
   "public_key": "",
