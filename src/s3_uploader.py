@@ -23,7 +23,7 @@ def get_key(file_path, date):
     '''
         construct s3 upload location
     '''
-    key = f"{date.strftime('%Y-%d-%Y')}/{path.basename(file_path)}"
+    key = f"{date.strftime('%m-%d-%Y')}/{path.basename(file_path)}"
     return key
 
 
