@@ -119,5 +119,5 @@ def get_memory_usage():
  
     total, available, used, free = total / MEGA, available / MEGA, used / MEGA, free / MEGA
     proc = PROCESS.memory_info()[1] / MEGA
-    return 'Memory Stat: process = %s, total = %s, available = %s, used = %s, free = %s, percent = %s'
-          % (proc, total, available, used, free, percent))
+    
+    return f'Memory Stat: process = {proc}, total = {total}, available = {available}, used = {used}, free = {free}, percent = {percent}'

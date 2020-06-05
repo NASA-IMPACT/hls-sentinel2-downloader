@@ -1,7 +1,7 @@
 #import external packages
 from os import remove, walk
 from boto3 import client, s3
-from logging import getLogger, handlers as log_handlers
+from logging import getLogger, handlers as log_handlers, DEBUG
 from datetime import datetime
 
 #import internal functions
@@ -22,24 +22,24 @@ transfer_config = s3.transfer.TransferConfig(
 '''
 
 status_logger = getLogger('StatusLogger')
-status_logger.setLevel(logging.DEBUG)
+status_logger.setLevel(DEBUG)
 status_handler = log_handlers.RotatingFileHandler(f'{LOGS_PATH}/status_logs.out', maxBytes=1000000, backupCount=50)
 status_logger.addHandler(status_handler)
 
 links_logger = getLogger('LinksLogger')
-links_logger.setLevel(logging.DEBUG)
+links_logger.setLevel(DEBUG)
 links_logger.addHandler(log_handlers.RotatingFileHandler(f'{LOGS_PATH}/links_logs.out', maxBytes=1000000, backupCount=50))
 
 downloads_logger = getLogger('DownloadsLogger')
-downloads_logger.setLevel(logging.DEBUG)
+downloads_logger.setLevel(DEBUG)
 downloads_logger.addHandler(log_handlers.RotatingFileHandler(f'{LOGS_PATH}/downloads_logs.out', maxBytes=1000000, backupCount=50))
 
 metrics_logger = getLogger('MetricsLogger')
-metrics_logger.setLevel(logging.DEBUG)
+metrics_logger.setLevel(DEBUG)
 metrics_logger.addHandler(log_handlers.RotatingFileHandler(f'{LOGS_PATH}/metrics_logs.out', maxBytes=1000000, backupCount=50))
 
 error_logger = getLogger('ErrorLogger')
-error_logger.setLevel(logging.DEBUG)
+error_logger.setLevel(DEBUG)
 error_logger.addHandler(log_handlers.RotatingFileHandler(f'{LOGS_PATH}/error_logs.out', maxBytes=1000000, backupCount=50))
 
 

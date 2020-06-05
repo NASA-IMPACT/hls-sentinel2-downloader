@@ -25,6 +25,12 @@ It uses aria2c (https://aria2.github.io/) download utility to handle actual down
 
 # Database Queries
 
+Get count and total size downloaded in last 10 minutes
+```sql
+select count(*) from granule where uploaded=True AND download_finished >= CONVERT_TZ( date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' )
+
+select sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ( date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' )
+```
 
 Get 50 latest links form the database
 ```sql

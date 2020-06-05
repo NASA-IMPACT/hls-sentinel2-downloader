@@ -10,7 +10,7 @@ from ntpath import basename
 from sys import exit
 from colorama import init as colorama_init, Fore, Back, Style
 from termcolor import colored
-from schedule import every, run_all
+from schedule import every, run_pending
 
 #import custom functions
 from download_manager import add_download_url, get_active_urls
@@ -33,14 +33,14 @@ def health_check():
     '''
     if DEBUG:
         print(f"{str(datetime.now())}, Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}")
-        print(f"{str(datetime.now())}, {get_memory_usage()}}")
+        print(f"{str(datetime.now())}, {get_memory_usage()}")
     log(f"Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}",status)
 
 
     if len(get_active_urls()) == 0:  # if no active downloads cleanup the download dir
         clean_up_downloads()
 
-    if FETCH_LINKS and (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
+    if FETCH_LINKS == True and (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
         Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
 
 def start_links_fetch():
@@ -51,13 +51,21 @@ def start_links_fetch():
 
     fetch_day = date.today()
 
-    #continue fetching links for the last 14 days
-    while fetch_day >= date.today() + timedelta(days=-14):  
-        fetch_day = fetch_day + timedelta(days=-1)
-        fetch_links_worker = Thread(name="fetch_links_worker", target=fetch_links, args=(fetch_day,))
-        fetch_links_worker.start()
-        fetch_links_worker.join()
+    try:
 
+        #continue fetching links for the last 14 days
+        while fetch_day >= date.today() + timedelta(days=-14):  
+            fetch_day = fetch_day + timedelta(days=-1)
+            fetch_links_worker = Thread(name="fetch_links_worker", target=fetch_links, args=(fetch_day,))
+            fetch_links_worker.start()
+            if fetch_links_worker.isAlive() == False:
+                sleep(3)
+            fetch_links_worker.join()
+    except RuntimeError as runtime_err:
+        if(DEBUG):
+            print(f'{str(datetime.now())}, RuntimeError: {str(runtime_err)}')
+        log(f'RuntimeError: {str(runtime_err)}','error')
+         
 def upload_file(file_path):
     '''
         upload given file to S3 and set flag in the database
@@ -315,7 +323,7 @@ def check_queues():
         if item['success'] == True:
             
             if(DEBUG):
-                print(f'{str(datetime.now())}, file uploaded {file_path}')
+                print(Fore.GREEN + f'{str(datetime.now())}, file uploaded {file_path}')
 
             filename = basename(file_path)
             filename = filename.replace('zip','SAFE')
@@ -330,6 +338,9 @@ def check_queues():
                 query = granule.select().where(granule.filename==filename).limit(1).offset(0)
                 granule_to_download= query.get()
                 granule_to_download.uploaded = True
+                granule_to_download.downloaded = True
+                granule_to_download.download_failed = False
+                granule_to_download.in_progress = False
                 granule_to_download.save()
             except Exception as e:
                 if(DEBUG):
@@ -358,7 +369,7 @@ def init():
     clean_up_downloads()
     
     #start the link fetcher
-    if FETCH_LINKS:
+    if FETCH_LINKS == True:
         Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
 
     #requeue all the failed download by resetting flags in the database, either for a given day or for all days
@@ -370,7 +381,7 @@ def init():
     #create scheduled events    
     every(3).seconds.do(check_queues)
     every(1).seconds.do(do_downloads)
-    every(15).seconds.do(health_check)
+    every(2).seconds.do(health_check)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
      
