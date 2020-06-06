@@ -45,6 +45,13 @@ def check_downloads_folder_size():
         #TODO: raise the alert
         clean_up_downloads()
 
+def remove_file(file_path):
+    try:
+        remove(file_path)
+    except Exception as e:
+        if(DEBUG):
+            print(f'{str(datetime.now())}, Error: cannot remove {file_path} {str(e)}')
+        log(f'cannot remove {file_path} {str(e)}','error')   
 
 def check_link_fetcher():
     '''
@@ -130,17 +137,17 @@ def upload_file(file_path):
     except MemoryError as memory_err:
         if(DEBUG):
             print(f'{str(datetime.now())}, Memory Error')
-        remove(file_path)
+        remove_file(file_path)
         log(f'Memory Error','error')
     except UnicodeDecodeError as unicode_error:
         if(DEBUG):
             print(f'{str(datetime.now())}, Unicode decode error during download of {file_path}')
-        remove(file_path)
+        remove_file(file_path)
         log(f'Unicode decode error during download of {file_path}','error')
     except Exception as e:
         if(DEBUG):
             print(f'{str(datetime.now())}, error during file_downloaded event: {str(e)},{file_path}')
-        remove(file_path)
+        remove_file(file_path)
         log(f'error during file_downloaded event: {str(e)}','error')
 
 def requeue_retry_failed(DOWNLOAD_DAY=None):
@@ -259,8 +266,14 @@ def download_file():
         granule_expected_checksum = granule_to_download.checksum
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
+            if DEBUG:
+                print(f"{str(datetime.now())}, file already downloaded = {filename}")
             log(f"{str(datetime.now())}, file already downloaded = {filename}", "status")
-            download_queue.put({"file_path":file_path,"success":True})
+            
+            #upload only if upload_orphan_downloads_worker is not running
+            if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
+                download_queue.put({"file_path":file_path,"success":True})
+                
             return
 
     #check if file is already uploaded to S3
@@ -368,6 +381,8 @@ def check_queues():
     if not upload_queue.empty():
         item = upload_queue.get()
         file_path = item['file_path']
+        filename = basename(file_path)
+        filename = filename.replace('zip','SAFE')
 
         #if file is successfully uploaded to S3, mark uploaded=True in the database and remove the file
         if item['success'] == True:
@@ -375,12 +390,7 @@ def check_queues():
             if(DEBUG):
                 print(Fore.GREEN + f'{str(datetime.now())}, file uploaded {file_path}')
 
-            filename = basename(file_path)
-            filename = filename.replace('zip','SAFE')
-
             log(f'file uploaded = {filename}','status')
-
-            remove(file_path)
 
             lock.acquire()
             db.connect()
@@ -395,13 +405,15 @@ def check_queues():
             except Exception as e:
                 if(DEBUG):
                     print(f'{str(datetime.now())}, Error: cannot set uploaded = True:{str(e)}')
-                log(f'Error: cannot set uploaded = True:{str(e)}','error')    
+                log(f'cannot set uploaded = True:{str(e)}','error')    
             db.close()
             lock.release()
+
         else:
-            remove(file_path)
             lock.acquire()
             db.connect()
+            query = granule.select().where(granule.filename==filename).limit(1).offset(0)
+            granule_to_download= query.get()
             granule_to_download.downloaded = False
             granule_to_download.in_progress = False
             granule_to_download.download_failed = True
@@ -410,6 +422,10 @@ def check_queues():
             granule_to_download.save()
             db.close()
             lock.release()
+
+        
+        remove_file(file_path)
+         
 
 def init():
     '''

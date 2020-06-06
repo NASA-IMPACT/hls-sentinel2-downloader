@@ -61,7 +61,7 @@ def get_checksum_local(file_path):
     try:
         hash = md5(open(file_path, 'rb').read()).hexdigest()
     except Exception as e:
-        hash = false
+        hash = False
         if DEBUG:
             print(Fore.RED + f"{str(datetime.now())}, error during md5 {str(e)}")
         log(f"error during md5 {str(e)}", "error")

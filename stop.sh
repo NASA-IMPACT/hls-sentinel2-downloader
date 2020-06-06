@@ -6,3 +6,4 @@ if test -f "$FILE"; then
     pid=$(<$FILE)
     kill -9 $pid
 fi
+rm $FILE
