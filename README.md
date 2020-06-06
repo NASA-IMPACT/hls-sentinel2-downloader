@@ -30,6 +30,9 @@ Get count and total size downloaded in last 10 minutes
 select count(*) from granule where uploaded=True AND download_finished >= CONVERT_TZ( date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' )
 
 select sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ( date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' )
+
+select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' ) group by CAST(beginposition AS DATE)
+
 ```
 
 Get 50 latest links form the database
@@ -92,6 +95,6 @@ Following logs are correct
 
 * Add correct indexes http://docs.peewee-orm.com/en/latest/peewee/models.html#indexes-and-constraints
 * Automate deployment
-* Add tests
+* Add tests and refactor code to allow chaos engineering on the system
 * Add debugging instructions
 * Add screenshots to the readme

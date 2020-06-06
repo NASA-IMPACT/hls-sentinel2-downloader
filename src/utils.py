@@ -8,6 +8,7 @@ from dateparser import parse as dateparser_parse
 from re import match, sub
 from fcntl import lockf, LOCK_EX, LOCK_NB
 from colorama import Fore
+from pathlib import Path
 
 #import custom functions
 from models import  granule, db
@@ -121,3 +122,11 @@ def get_memory_usage():
     proc = PROCESS.memory_info()[1] / MEGA
     
     return f'Memory Stat: process = {proc}, total = {total}, available = {available}, used = {used}, free = {free}, percent = {percent}'
+
+def get_folder_size(p):
+    '''
+        get folder size
+    '''
+    root_directory = Path(p)
+    return sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
+

@@ -1,5 +1,6 @@
 settings.ini
 quicksight.json
+nohup*
 nohup.out
 nohup.log
 nohup_pid.txt

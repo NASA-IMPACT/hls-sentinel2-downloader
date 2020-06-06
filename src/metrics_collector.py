@@ -1,24 +1,16 @@
 #import external packages
 from datetime import datetime
 from json import dumps as json_dump
-from pathlib import Path
 from glob import glob1
 from psutil import virtual_memory, cpu_percent, cpu_count
 
 #import internal functions
 from models import  granule, granule_count,status, db
+from utils import get_folder_size
 from settings import LOGS_PATH, DOWNLOADS_PATH
 from download_manager import get_active_urls
 from log_manager import log
 from thread_manager import lock, active_count
-
-def getFolderSize(p):
-    '''
-        get folder size
-    '''
-    root_directory = Path(p)
-    return sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
-
 
 def collect_metrics():
     '''
@@ -39,8 +31,8 @@ def collect_metrics():
     metrics['total_granules_downloaded'] =  granule.select().where(granule.downloaded==True).count()
     metrics['total_downloads_in_progress'] = len(get_active_urls())
     metrics['total_active_threads'] = active_count()
-    metrics['log_folder_size'] = getFolderSize(LOGS_PATH) 
-    metrics['download_folder_size'] = getFolderSize(DOWNLOADS_PATH)
+    metrics['log_folder_size'] = get_folder_size(LOGS_PATH) 
+    metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
     metrics['count_download_folder_files'] = len(glob1(DOWNLOADS_PATH,"*.zip"))
     metrics['count_download_folder_aria2_files'] = len(glob1(DOWNLOADS_PATH,"*.aria2"))
     metrics['total_memory'] = virtual_memory().total

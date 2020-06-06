@@ -1,7 +1,7 @@
 #import external packages
 from time import sleep
 from multiprocessing import Process
-from os import remove, path
+from os import remove, path, listdir
 from models import status,  granule, db
 from log_manager import log
 from settings import DEBUG
@@ -15,7 +15,7 @@ from schedule import every, run_pending
 #import custom functions
 from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
-from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked
+from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size
 from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
@@ -36,6 +36,11 @@ def health_check():
         print(f"{str(datetime.now())}, {get_memory_usage()}")
     log(f"Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}",status)
 
+
+    if get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024) > 500:
+        #download folder's size has reached above 500GB that means something must be terribly went wrong
+        #TODO: raise the alert
+        clean_up_downloads()
 
     if len(get_active_urls()) == 0:  # if no active downloads cleanup the download dir
         clean_up_downloads()
@@ -183,7 +188,8 @@ def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
-    global DOWNLOAD_DAY
+    global DOWNLOAD_DAY # should be in format Y-m-d
+
     query = (
         granule.select()
         .where(granule.ignore_file == False)
@@ -209,18 +215,23 @@ def download_file():
         granule_to_download_count = query.count()
 
         if not DOWNLOAD_DAY == None:
-            log_msg = f"{granule_to_download_count} left to download for {DOWNLOAD_DAY}"
+            if DEBUG:
+                print(f'{str(datetime.now())}, {granule_to_download_count} left to download for {DOWNLOAD_DAY}')
+            log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
         else:
-            log_msg = f"{granule_to_download_count} left to download"
-
-        if DEBUG:
-            print(f'{str(datetime.now())}, {log_msg}')
-        log(log_msg, "status")
+            DOWNLOAD_DAY = granule_to_download.beginposition.strftime("%Y-%m-%d")
+            if DEBUG:
+                print(f"{str(datetime.now())}, no download day specified so setting download day to {DOWNLOAD_DAY}")
+            log(f"no download day specified so setting download day to {DOWNLOAD_DAY}", "status")
+            db.close()
+            lock.release()
+            return
 
     except Exception as e:
 
-        print(f"{str(datetime.now())}, No file to download found for {DOWNLOAD_DAY}")
-        log(f"No file to download found {DOWNLOAD_DAY}", "status")
+        if DEBUG:
+            print(f"{str(datetime.now())}, No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})")
+        log(f"No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})", "status")
 
         db.close()
         lock.release()
@@ -274,6 +285,26 @@ def download_file():
         granule_to_download.save()
         db.close()
         lock.release()
+
+def check_orphan_uploads():
+    '''
+        check downloads folder to upload files those were downloaded 1 hr ago did not get not uploaded
+        this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and 
+        download folder was getting filled up pretty fast
+    '''
+    if(DEBUG):
+        print(f'{str(datetime.now())}, checking downloads folder for orphan files that were downloaded but not uploaded')
+    log('checking downloads folder for orphan files that were downloaded but not uploaded','status')
+  
+    all_zip_files = filter(lambda x: x.endswith('.zip'), listdir(DOWNLOADS_PATH))
+   
+    now = datetime.now()
+    for f in all_zip_files:
+        file_path = f'{DOWNLOADS_PATH}/{f}'
+        modify_date = datetime.fromtimestamp(path.getmtime(file_path))
+        modify_date_1hr_ago= now + timedelta(hours=-1)
+        if modify_date < modify_date_1hr_ago:
+            upload_file(file_path)
 
 def do_downloads():
     '''
@@ -365,9 +396,9 @@ def init():
     '''
         Initilize the link fetching and start the scheduler
     '''
-    kill_downloader()
-    clean_up_downloads()
+     
     
+
     #start the link fetcher
     if FETCH_LINKS == True:
         Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
@@ -378,13 +409,21 @@ def init():
     else:
         requeue_retry_failed()
 
+    
+    
+  
+    kill_downloader()
+    clean_up_downloads()
+
     #create scheduled events    
     every(3).seconds.do(check_queues)
     every(1).seconds.do(do_downloads)
     every(2).seconds.do(health_check)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
-     
+    every(1).hour.do(check_orphan_uploads)
+    
+    
     #start the scheduler
     while True:
         run_pending()

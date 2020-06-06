@@ -2,10 +2,12 @@
 from time import sleep
 from os import popen as os_popen
 from subprocess import Popen as subprocess_Popen, PIPE as subprocess_PIPE
+from datetime import datetime
 import aria2p
 
 #import internal functions
-from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH
+from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, DEBUG
+from log_manager import log
 from thread_manager import  download_queue
 
 
@@ -46,6 +48,9 @@ def handle_download_complete(aria2, gid):
     file_path = str(download.root_files_paths[0])
 
     download_queue.put({"file_path":file_path,"success":True})
+    if DEBUG:
+        print(f"{str(datetime.now())}, download complete event occured from aria2 for {file_path}")
+    log(f"download complete event occured from aria2 for {file_path}","status")
    
 
 def aria2_add_listeners():
