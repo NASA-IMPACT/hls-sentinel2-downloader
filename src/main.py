@@ -25,26 +25,31 @@ from thread_manager import lock, download_queue, upload_queue, Thread, active_co
 
 colorama_init(autoreset=True) #required to print colors in both UNIX and Windows OS
 fetch_links_worker = None
+upload_orphan_downloads_worker = None
 
-
-def health_check():
+def check_downloads_folder_size():
     '''
-        check health of various running threads
+        check size of download folder and take action if it is filling up
     '''
-    if DEBUG:
-        print(f"{str(datetime.now())}, Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}")
-        print(f"{str(datetime.now())}, {get_memory_usage()}")
-    log(f"Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}",status)
+    global upload_orphan_downloads_worker
 
+    download_folder_size = get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024)
 
-    if get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024) > 500:
+    if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
+        if download_folder_size > 100:
+            upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
+            upload_orphan_downloads_worker.start()
+    
+    if download_folder_size > 600:
         #download folder's size has reached above 500GB that means something must be terribly went wrong
         #TODO: raise the alert
         clean_up_downloads()
 
-    if len(get_active_urls()) == 0:  # if no active downloads cleanup the download dir
-        clean_up_downloads()
 
+def check_link_fetcher():
+    '''
+        check if the link fetcher is running or not, if not start it again
+    '''
     if FETCH_LINKS == True and (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
         Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
 
@@ -157,6 +162,7 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
 
             if(failed_count > 0):
                 granule.update(download_failed=False,downloaded=False,in_progress=False,uploaded=False).where(granule.download_failed == True).where(granule.beginposition.between(start_date, end_date)).execute() #.where(granule.retry < 5)
+                
                 if DEBUG:
                     print(f"{str(datetime.now())}, resettting download failed flag for {DOWNLOAD_DAY}")
                 log(f"resettting download failed flag for {DOWNLOAD_DAY}", "status")
@@ -171,6 +177,7 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
             lock.acquire()
             db.connect()
             granule.update(in_progress=False,downloaded=False,download_failed=False,uploaded=False).where(granule.download_failed == True).execute()
+            granule.update(in_progress=False).execute() 
             if DEBUG:
                 print(f"{str(datetime.now())}, resetting flags to download all remaining files")
             log(f"resetting flags to download all remaining files", "status")
@@ -286,7 +293,7 @@ def download_file():
         db.close()
         lock.release()
 
-def check_orphan_uploads():
+def upload_orphan_downloads():
     '''
         check downloads folder to upload files those were downloaded 1 hr ago did not get not uploaded
         this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and 
@@ -310,7 +317,19 @@ def do_downloads():
     '''
         if there are less than 14 downloads in progress, add one more to aria2 queue
     '''
-    if len(get_active_urls()) < 15:
+    if DEBUG:
+        print(f"{str(datetime.now())}, Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}")
+        print(f"{str(datetime.now())}, {get_memory_usage()}")
+    log(f"Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}",status)
+
+   
+    #if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
+    if (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
+         maximum_downloads = 15
+    else:
+         maximum_downloads = 14
+
+    if len(get_active_urls()) < maximum_downloads:
         try:
             download_file()
         except Exception as e:
@@ -397,11 +416,11 @@ def init():
         Initilize the link fetching and start the scheduler
     '''
      
-    
-
     #start the link fetcher
-    if FETCH_LINKS == True:
-        Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
+    check_link_fetcher()
+
+    #kill existing aria2 instance
+    kill_downloader()
 
     #requeue all the failed download by resetting flags in the database, either for a given day or for all days
     if not DOWNLOAD_DAY is None:
@@ -410,19 +429,14 @@ def init():
         requeue_retry_failed()
 
     
-    
-  
-    kill_downloader()
-    clean_up_downloads()
-
     #create scheduled events    
     every(3).seconds.do(check_queues)
+    every(1).minute.do(check_downloads_folder_size)
     every(1).seconds.do(do_downloads)
-    every(2).seconds.do(health_check)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
-    every(1).hour.do(check_orphan_uploads)
-    
+    every(12).hours.do(check_link_fetcher)
+
     
     #start the scheduler
     while True:

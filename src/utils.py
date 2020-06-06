@@ -58,7 +58,15 @@ def get_checksum_local(file_path):
         https://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
         https://stackoverflow.com/questions/32442693/memory-error-python-when-processing-files/32443595
     '''
-    return md5(open(file_path, 'rb').read()).hexdigest()
+    try:
+        hash = md5(open(file_path, 'rb').read()).hexdigest()
+    except Exception as e:
+        hash = false
+        if DEBUG:
+            print(Fore.RED + f"{str(datetime.now())}, error during md5 {str(e)}")
+        log(f"error during md5 {str(e)}", "error")
+
+    return hash
 
 
 def get_include_tiles_list():
