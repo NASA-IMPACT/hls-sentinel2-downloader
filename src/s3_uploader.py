@@ -5,7 +5,7 @@ from boto3 import client, resource as boto_resource, s3
 from botocore.exceptions import ClientError
 
 #import internal functions
-from settings import S3_UPLOAD_BUCKET
+from settings import S3_UPLOAD_BUCKET, DEBUG
 from log_manager import log
 from thread_manager import lock, upload_queue
 from models import status, db
@@ -53,6 +53,10 @@ def s3_upload_file(file_path, date):
     key =  get_key(file_path,date)
 
     try:
+        if(DEBUG):
+            print(f'{str(datetime.now())}, uploading file {file_path} to {S3_UPLOAD_BUCKET}/{key}')
+        log(f'uploading file {file_path} to {S3_UPLOAD_BUCKET}/{key}','status')
+
         s3_client.upload_file(file_path, S3_UPLOAD_BUCKET, key, Config=transfer_config)
         lock.acquire()
         db.connect()
@@ -65,5 +69,7 @@ def s3_upload_file(file_path, date):
         upload_queue.put({"file_path":file_path,"success":True})
 
     except Exception as e:
-        log(f'error during uploading file: {file_path} to {S3_UPLOAD_BUCKET}','error')
+        if(DEBUG):
+                print(f'{str(datetime.now())}, error during uploading file: {file_path} to {S3_UPLOAD_BUCKET} {str(e)}')
+        log(f'error during uploading file: {file_path} to {S3_UPLOAD_BUCKET} {str(e)}','error')
         upload_queue.put({"file_path":file_path,"success":False})

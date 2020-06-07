@@ -77,7 +77,7 @@ def start_links_fetch():
             fetch_links_worker.join()
     except RuntimeError as runtime_err:
         if(DEBUG):
-            print(f'{str(datetime.now())}, RuntimeError: {str(runtime_err)}')
+            print(Fore.RED + f'{str(datetime.now())}, RuntimeError: {str(runtime_err)}')
         log(f'RuntimeError: {str(runtime_err)}','error')
          
 def upload_file(file_path):
@@ -119,8 +119,8 @@ def upload_file(file_path):
             s3_upload_worker.start()
         else:
             if(DEBUG):
-                print(f'{str(datetime.now())}, Checksum did not match for {file_path}')
-            log(f'Checksum did not match for {file_path}','error')
+                print(Fore.RED + f'{str(datetime.now())}, checksum did not match for {file_path}')
+            log(f'checksum did not match for {file_path}','error')
             upload_queue.put({"file_path":file_path,"success":False})
 
         lock.acquire()
@@ -133,17 +133,17 @@ def upload_file(file_path):
 
     except MemoryError as memory_err:
         if(DEBUG):
-            print(f'{str(datetime.now())}, Memory Error')
+            print(Fore.RED + f'{str(datetime.now())}, Memory Error')
         remove_file(file_path)
         log(f'Memory Error','error')
     except UnicodeDecodeError as unicode_error:
         if(DEBUG):
-            print(f'{str(datetime.now())}, Unicode decode error during download of {file_path}')
+            print(Fore.RED + f'{str(datetime.now())}, Unicode decode error during download of {file_path}')
         remove_file(file_path)
         log(f'Unicode decode error during download of {file_path}','error')
     except Exception as e:
         if(DEBUG):
-            print(f'{str(datetime.now())}, error during file_downloaded event: {str(e)},{file_path}')
+            print(Fore.RED + f'{str(datetime.now())}, error during file_downloaded event: {str(e)},{file_path}')
         remove_file(file_path)
         log(f'error during file_downloaded event: {str(e)}','error')
 
@@ -207,7 +207,7 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
     
     except Exception as e:
         if DEBUG:
-            print(f"{str(datetime.now())}, failed resettting download failed flag")
+            print(Fore.RED + f"{str(datetime.now())}, failed resettting download failed flag")
         log(f"failed resettting download failed flag", "error")
         return False
 
@@ -321,7 +321,7 @@ def download_file():
 
 def upload_orphan_downloads():
     '''
-        check downloads folder to upload files those were downloaded 1 hr ago did not get not uploaded
+        check downloads folder to upload files those were downloaded 2 hrs ago did not get not uploaded
         this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and 
         download folder was getting filled up pretty fast
     '''
@@ -336,12 +336,12 @@ def upload_orphan_downloads():
         file_path = f'{DOWNLOADS_PATH}/{f}'
         try:
             modify_date = datetime.fromtimestamp(path.getmtime(file_path))
-            modify_date_1hr_ago= now + timedelta(hours=-1)
-            if modify_date < modify_date_1hr_ago:
+            modify_date_2hr_ago= now + timedelta(hours=-2)
+            if modify_date < modify_date_2hr_ago:
                 upload_file(file_path)
         except Exception as e:
             if(DEBUG):
-                print(f'{str(datetime.now())}, error during running orphan file checker {str(e)}')
+                print(Fore.RED + f'{str(datetime.now())}, error during running orphan file checker {str(e)}')
             log(f'error during running orphan file checker {str(e)}','error')
   
 
@@ -366,7 +366,7 @@ def do_downloads():
             download_file()
         except Exception as e:
             if DEBUG:
-                print(f"{str(datetime.now())}, error during initiaing_downloads:{str(e)}", "status")
+                print(Fore.RED + f"{str(datetime.now())}, error during initiaing_downloads:{str(e)}", "status")
             log(f"error during initiaing downloads:{str(e)}", "status")
 
 def check_queues():
@@ -423,7 +423,7 @@ def check_queues():
                 granule_to_download.save()
             except Exception as e:
                 if(DEBUG):
-                    print(f'{str(datetime.now())}, error: cannot set uploaded = True:{str(e)}')
+                    print(Fore.RED + f'{str(datetime.now())}, error: cannot set uploaded = True:{str(e)}')
                 log(f'cannot set uploaded = True:{str(e)}','error')    
             db.close()
             lock.release()
@@ -450,7 +450,8 @@ def init():
     '''
         Initilize the link fetching and start the scheduler
     '''
-     
+    
+
     #start the link fetcher
     check_link_fetcher()
 
@@ -466,12 +467,11 @@ def init():
     
     #create scheduled events    
     every(3).seconds.do(check_queues)
-    every(1).hour.do(check_downloads_folder_size)
-    every(1).seconds.do(do_downloads)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
     every(12).hours.do(check_link_fetcher)
-
+    every(5).minutes.do(check_downloads_folder_size)
+    every(1).seconds.do(do_downloads)
     
     #start the scheduler
     while True:

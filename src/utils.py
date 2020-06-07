@@ -108,6 +108,9 @@ def remove_file(file_path):
         remove a file
     '''
     try:
+        if(DEBUG):
+            print(f'{str(datetime.now())}, removing file {file_path}')
+        log(f'removing file {file_path}','status')  
         remove(file_path)
     except Exception as e:
         if(DEBUG):
