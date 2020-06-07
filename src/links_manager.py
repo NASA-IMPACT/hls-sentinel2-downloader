@@ -223,10 +223,10 @@ def fetch_links(fetch_day):
                 granule_counter = granule_count.get(granule_count.date == fetch_day)
                 granule_counter.fetched_links = total_fetched_entries
                 granule_counter.last_fetched_time = datetime.now()
-                granule_counter.save()
-                log(f'{total_fetched_entries} links fetched for {fetch_day}','links')
+                granule_counter.save()            
                 if(DEBUG):
-                    print(f'{total_fetched_entries} links fetched for {fetch_day}')
+                    print(f'{str(datetime.now())}, {total_fetched_entries} links fetched for {fetch_day}')
+                log(f'{total_fetched_entries} links fetched for {fetch_day}','links')
             except Exception as e:
                 if(DEBUG):
                     print(f'error: {str(e)}, {filename}')
