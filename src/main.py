@@ -97,7 +97,7 @@ def upload_file(file_path):
         lock.acquire()
         db.connect()
         query = granule.select().where(granule.filename==filename).limit(1).offset(0)
-        granule_to_download= query.get()
+        granule_to_download = query.get()
         granule_to_download.downloaded = True
         granule_to_download.in_progress = False
         granule_to_download.download_failed = False
@@ -432,7 +432,7 @@ def check_queues():
             lock.acquire()
             db.connect()
             query = granule.select().where(granule.filename==filename).limit(1).offset(0)
-            granule_to_download= query.get()
+            granule_to_download = query.get()
             granule_to_download.downloaded = False
             granule_to_download.in_progress = False
             granule_to_download.download_failed = True
