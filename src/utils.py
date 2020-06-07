@@ -61,7 +61,7 @@ def get_checksum_local(file_path):
     try:
         hash = md5(open(file_path, 'rb').read()).hexdigest()
     except Exception as e:
-        hash = False
+        hash = ''
         if DEBUG:
             print(Fore.RED + f"{str(datetime.now())}, error during md5 {str(e)}")
         log(f"error during md5 {str(e)}", "error")
@@ -103,13 +103,24 @@ def kill_downloader():
                 print(Fore.RED + f"{str(datetime.now())}, existing aria2c process killed")
             log(f"existing aria2c process killed", "status")
 
+def remove_file(file_path):
+    '''
+        remove a file
+    '''
+    try:
+        remove(file_path)
+    except Exception as e:
+        if(DEBUG):
+            print(f'{str(datetime.now())}, error: cannot remove {file_path} {str(e)}')
+        log(f'cannot remove {file_path} {str(e)}','error')   
+
 def clean_up_downloads():
     '''
         remove all files in the downloads folder
     '''
     files = glob(f'{DOWNLOADS_PATH}/*.*')
     for f in files:
-        remove(f)
+        remove_file(f)
     
 def get_memory_usage():
     '''

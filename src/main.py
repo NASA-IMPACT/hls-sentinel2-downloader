@@ -15,7 +15,7 @@ from schedule import every, run_pending
 #import custom functions
 from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
-from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size
+from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file
 from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
@@ -42,16 +42,13 @@ def check_downloads_folder_size():
     
     if download_folder_size > 600:
         #download folder's size has reached above 500GB that means something must be terribly went wrong
+        #it should never reach to this size under normal operating conditions
         #TODO: raise the alert
+        if(DEBUG):
+            print(Fore.RED + f'{str(datetime.now())}, download folder size reached above 600GB, cleaning up old downloads')
+        log(f'download folder size reached above 600GB, cleaning up old downloads','error')
         clean_up_downloads()
 
-def remove_file(file_path):
-    try:
-        remove(file_path)
-    except Exception as e:
-        if(DEBUG):
-            print(f'{str(datetime.now())}, Error: cannot remove {file_path} {str(e)}')
-        log(f'cannot remove {file_path} {str(e)}','error')   
 
 def check_link_fetcher():
     '''
@@ -168,8 +165,16 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
             failed_count = query.count()
 
             if(failed_count > 0):
+
+                #reset failed downloads
                 granule.update(download_failed=False,downloaded=False,in_progress=False,uploaded=False).where(granule.download_failed == True).where(granule.beginposition.between(start_date, end_date)).execute() #.where(granule.retry < 5)
                 
+                #reset failed uploads
+                granule.update(in_progress=False,downloaded=False,download_failed=False).where(granule.uploaded == False).where(granule.beginposition.between(start_date, end_date)).execute()
+                
+                #reset all in progress flags
+                granule.update(in_progress=False).where(granule.beginposition.between(start_date, end_date)).execute()
+
                 if DEBUG:
                     print(f"{str(datetime.now())}, resettting download failed flag for {DOWNLOAD_DAY}")
                 log(f"resettting download failed flag for {DOWNLOAD_DAY}", "status")
@@ -183,8 +188,16 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
         else:
             lock.acquire()
             db.connect()
+
+            #reset failed downloads
             granule.update(in_progress=False,downloaded=False,download_failed=False,uploaded=False).where(granule.download_failed == True).execute()
+            
+            #reset failed uploads
+            granule.update(in_progress=False,downloaded=False,download_failed=False).where(granule.uploaded == False).execute()
+            
+            #reset all in progress flags
             granule.update(in_progress=False).execute() 
+
             if DEBUG:
                 print(f"{str(datetime.now())}, resetting flags to download all remaining files")
             log(f"resetting flags to download all remaining files", "status")
@@ -321,10 +334,16 @@ def upload_orphan_downloads():
     now = datetime.now()
     for f in all_zip_files:
         file_path = f'{DOWNLOADS_PATH}/{f}'
-        modify_date = datetime.fromtimestamp(path.getmtime(file_path))
-        modify_date_1hr_ago= now + timedelta(hours=-1)
-        if modify_date < modify_date_1hr_ago:
-            upload_file(file_path)
+        try:
+            modify_date = datetime.fromtimestamp(path.getmtime(file_path))
+            modify_date_1hr_ago= now + timedelta(hours=-1)
+            if modify_date < modify_date_1hr_ago:
+                upload_file(file_path)
+        except Exception as e:
+            if(DEBUG):
+                print(f'{str(datetime.now())}, error during running orphan file checker {str(e)}')
+            log(f'error during running orphan file checker {str(e)}','error')
+  
 
 def do_downloads():
     '''
@@ -404,7 +423,7 @@ def check_queues():
                 granule_to_download.save()
             except Exception as e:
                 if(DEBUG):
-                    print(f'{str(datetime.now())}, Error: cannot set uploaded = True:{str(e)}')
+                    print(f'{str(datetime.now())}, error: cannot set uploaded = True:{str(e)}')
                 log(f'cannot set uploaded = True:{str(e)}','error')    
             db.close()
             lock.release()
@@ -447,7 +466,7 @@ def init():
     
     #create scheduled events    
     every(3).seconds.do(check_queues)
-    every(1).minute.do(check_downloads_folder_size)
+    every(1).hour.do(check_downloads_folder_size)
     every(1).seconds.do(do_downloads)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
