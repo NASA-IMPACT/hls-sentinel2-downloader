@@ -451,7 +451,6 @@ def init():
         Initilize the link fetching and start the scheduler
     '''
     
-
     #start the link fetcher
     check_link_fetcher()
 

@@ -9,7 +9,6 @@ from settings import LOGS_PATH, S3_LOG_BUCKET
 
 s3_client = client('s3')
 
-
 transfer_config = s3.transfer.TransferConfig(
     multipart_threshold=1024 * 25,
     max_concurrency=10,

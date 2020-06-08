@@ -16,7 +16,6 @@ from thread_manager import lock
 from log_manager import log
 from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, INCLUDE_TILES_FILE
 
-
 file_handle = None
 def file_is_locked():
     '''

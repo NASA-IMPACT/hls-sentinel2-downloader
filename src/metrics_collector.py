@@ -62,4 +62,3 @@ def collect_metrics():
     db.close()
     lock.release()
     log(json_dump(metrics),'metrics')
- 

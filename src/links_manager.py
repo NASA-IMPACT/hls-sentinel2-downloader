@@ -238,4 +238,3 @@ def fetch_links(fetch_day):
             if (total_fetched_entries >= total_results):
                 break
             
-
