@@ -13,7 +13,6 @@ from thread_manager import  download_queue
 
 aria2 = None
 aria2_client = None
-gids = {}
 
 def handle_download_start(aria2, gid):
     '''
@@ -26,13 +25,9 @@ def handle_download_error(aria2, gid):
     '''
         aria2 download failed event handler
     '''
-    global gids
     download = aria2.get_download(gid)
 
-    url_failed = gids[download.gid]  #alternate way - download.files[0].uris[0]['uri']
-
-    if download.gid in gids.keys():
-        del gids[download.gid]
+    url_failed = download.files[0].uris[0]['uri'] #alternate way - gids[download.gid] 
 
     download_queue.put({"url":url_failed,"success":False})
 
@@ -40,11 +35,8 @@ def handle_download_complete(aria2, gid):
     '''
         aria2 download complete event handler
     '''
-
-    global gids
     download = aria2.get_download(gid)
-    if download.gid in gids.keys():
-        del gids[download.gid] 
+
     file_path = str(download.root_files_paths[0])
 
     download_queue.put({"file_path":file_path,"success":True})
@@ -57,7 +49,6 @@ def aria2_add_listeners():
     '''
         aria2 add events handler
     '''
-
     global aria2
     aria2.listen_to_notifications(
         threaded=True,
@@ -85,7 +76,6 @@ def start_aria2():
         start aria2
         ref - https://www.cyberciti.biz/faq/python-execute-unix-linux-command-examples/
     '''
-
     p = subprocess_Popen(
         [
             "aria2c",
@@ -108,7 +98,6 @@ def init_aria2():
     '''
         initialize aria2
     '''
-
     global aria2, aria2_client
 
     if not is_aria2_running():
@@ -124,13 +113,11 @@ def add_download_url(url):
         add a url in aria2's download list
     '''
     global aria2
-    global gids
 
     if aria2 is None:
         init_aria2()
 
     download = aria2.add_uris([url])
-    gids[download.gid] = url
     return download
 
 def get_active_urls():

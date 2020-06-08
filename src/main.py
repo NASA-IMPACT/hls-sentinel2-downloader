@@ -36,9 +36,9 @@ def check_downloads_folder_size():
     download_folder_size = get_download_folder_size()
 
     if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
-    #if download_folder_size > 100:
-        upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
-        upload_orphan_downloads_worker.start()
+        if download_folder_size > 100:
+            upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
+            upload_orphan_downloads_worker.start()
     
     if download_folder_size > 600:
         #download folder's size has reached above 500GB that means something must be terribly went wrong
@@ -268,7 +268,7 @@ def download_file():
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
 
-    '''
+    
     #check if file is already downloaded with valid checksum in the downloads folder
     if path.exists(file_path):
         granule_expected_checksum = granule_to_download.checksum
@@ -283,7 +283,7 @@ def download_file():
                 download_queue.put({"file_path":file_path,"success":True})
                 
             return
-    '''
+    
 
     #check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
@@ -449,12 +449,14 @@ def check_queues():
         
         remove_file(file_path)
          
+def run_threaded(job_func):
+    job_thread = Thread(target=job_func)
+    job_thread.start()
 
 def init():
     '''
         Initilize the link fetching and start the scheduler
     '''
-    
 
     #start the link fetcher
     check_link_fetcher()
@@ -470,12 +472,12 @@ def init():
 
     
     #create scheduled events    
-    every(1).seconds.do(check_queues)
-    every(1).minutes.do(collect_metrics)
-    every(5).minutes.do(s3_upload_logs)
-    every(12).hours.do(check_link_fetcher)
-    #every(1).minutes.do(check_downloads_folder_size)
-    every(2).seconds.do(do_downloads)
+    every(1).seconds.do(run_threaded, check_queues)
+    every(1).minutes.do(run_threaded, collect_metrics)
+    every(5).minutes.do(run_threaded, s3_upload_logs)
+    every(12).hours.do(run_threaded, check_link_fetcher)
+    every(1).minutes.do(run_threaded, check_downloads_folder_size)
+    every(4).seconds.do(do_downloads)
     
     #start the scheduler
     while True:
