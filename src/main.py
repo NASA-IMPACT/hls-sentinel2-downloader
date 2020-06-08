@@ -26,6 +26,7 @@ from thread_manager import lock, download_queue, upload_queue, Thread, active_co
 colorama_init(autoreset=True) #required to print colors in both UNIX and Windows OS
 fetch_links_worker = None
 upload_orphan_downloads_worker = None
+download_file_worker = None
 
 def check_downloads_folder_size():
     '''
@@ -348,6 +349,8 @@ def do_downloads():
     '''
         if there are less than 14 downloads in progress, add one more to aria2 queue
     '''
+    global download_file_worker
+
     if DEBUG:
         print(f"{str(datetime.now())}, #threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB")
         print(f"{str(datetime.now())}, {get_memory_usage()}")
@@ -362,7 +365,9 @@ def do_downloads():
 
     if len(get_active_urls()) < maximum_downloads:
         try:
-            download_file()
+            if download_file_worker == None or download_file_worker.isAlive() == False:
+                download_file_worker = Thread(name="download_file_worker", target=download_file, args=())
+                download_file_worker.start()
         except Exception as e:
             if DEBUG:
                 print(Fore.RED + f"{str(datetime.now())}, error during initiaing_downloads:{str(e)}", "status")
@@ -477,7 +482,7 @@ def init():
     every(5).minutes.do(run_threaded, s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(4).seconds.do(do_downloads)
+    every(2).seconds.do(do_downloads)
     
     #start the scheduler
     while True:
