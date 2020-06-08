@@ -10,7 +10,7 @@ from utils import get_folder_size
 from settings import LOGS_PATH, DOWNLOADS_PATH
 from download_manager import get_active_urls
 from log_manager import log
-from thread_manager import lock, active_count
+from thread_manager import lock, active_count, upload_queue, download_queue
 
 def collect_metrics():
     '''
@@ -30,6 +30,8 @@ def collect_metrics():
     metrics['total_granules_not_downloaded'] =  granule.select().where(granule.downloaded==False).where(granule.ignore_file==False).count()
     metrics['total_granules_downloaded'] =  granule.select().where(granule.downloaded==True).count()
     metrics['total_downloads_in_progress'] = len(get_active_urls())
+    metrics['total_upload_queue_items'] = upload_queue.qsize()
+    metrics['total_download_queue_items'] = download_queue.qsize()
     metrics['total_active_threads'] = active_count()
     metrics['log_folder_size'] = get_folder_size(LOGS_PATH) 
     metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
@@ -62,3 +64,4 @@ def collect_metrics():
     db.close()
     lock.release()
     log(json_dump(metrics),'metrics')
+ 

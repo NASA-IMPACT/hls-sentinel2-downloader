@@ -15,11 +15,11 @@ from schedule import every, run_pending
 #import custom functions
 from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
-from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file
+from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size
 from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
-from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, FETCH_LINKS
+from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT
 from thread_manager import lock, download_queue, upload_queue, Thread, active_count
 
 
@@ -33,12 +33,12 @@ def check_downloads_folder_size():
     '''
     global upload_orphan_downloads_worker
 
-    download_folder_size = get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024)
+    download_folder_size = get_download_folder_size()
 
     if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
-        if download_folder_size > 100:
-            upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
-            upload_orphan_downloads_worker.start()
+    #if download_folder_size > 100:
+        upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
+        upload_orphan_downloads_worker.start()
     
     if download_folder_size > 600:
         #download folder's size has reached above 500GB that means something must be terribly went wrong
@@ -84,13 +84,7 @@ def upload_file(file_path):
     '''
         upload given file to S3 and set flag in the database
     '''
-    if(DEBUG):
-        print(f'{str(datetime.now())}, file downloaded {file_path}')
-
     filename = basename(file_path)
-
-    log(f'file downloaded = {filename}','status')
-
     filename = filename.replace('zip','SAFE')
 
     try:
@@ -274,20 +268,22 @@ def download_file():
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
 
+    '''
     #check if file is already downloaded with valid checksum in the downloads folder
     if path.exists(file_path):
         granule_expected_checksum = granule_to_download.checksum
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
             if DEBUG:
-                print(f"{str(datetime.now())}, file already downloaded = {filename}")
-            log(f"{str(datetime.now())}, file already downloaded = {filename}", "status")
+                print(f"{str(datetime.now())}, found existing file in downloads dir = {filename}")
+            log(f"{str(datetime.now())}, found existing file in downloads dir = {filename}", "status")
             
             #upload only if upload_orphan_downloads_worker is not running
             if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
                 download_queue.put({"file_path":file_path,"success":True})
                 
             return
+    '''
 
     #check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
@@ -338,6 +334,9 @@ def upload_orphan_downloads():
             modify_date = datetime.fromtimestamp(path.getmtime(file_path))
             modify_date_2hr_ago= now + timedelta(hours=-2)
             if modify_date < modify_date_2hr_ago:
+                if(DEBUG):
+                    print(Fore.GREEN + f'{str(datetime.now())}, uploading {file_path} with time {modify_date}')
+                log(f'uploading {file_path} with time {modify_date}','status')
                 upload_file(file_path)
         except Exception as e:
             if(DEBUG):
@@ -350,16 +349,16 @@ def do_downloads():
         if there are less than 14 downloads in progress, add one more to aria2 queue
     '''
     if DEBUG:
-        print(f"{str(datetime.now())}, Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}")
+        print(f"{str(datetime.now())}, #threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB")
         print(f"{str(datetime.now())}, {get_memory_usage()}")
-    log(f"Total threads = {active_count()}, aria2 downloads in progress = {len(get_active_urls())}",status)
+    log(f"#threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB","status")
 
    
     #if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
     if (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
-         maximum_downloads = 15
+         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT
     else:
-         maximum_downloads = 14
+         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
     if len(get_active_urls()) < maximum_downloads:
         try:
@@ -376,10 +375,15 @@ def check_queues():
     #check download queue
     if not download_queue.empty():
         item = download_queue.get()
-
+        
         # if item is successfully downloaded, attempt upload otherwise, mark as failed in the database
         if item['success'] == True:
-            upload_file(item['file_path'])
+            file_path = item['file_path']
+            if(DEBUG):
+                print(f'{str(datetime.now())}, file downloaded {file_path}')
+            filename = basename(file_path)
+            log(f'file downloaded = {filename}','status')
+            upload_file(file_path)
         elif item['success'] == False:
             failed_url = item['url']
             lock.acquire()
@@ -451,6 +455,7 @@ def init():
         Initilize the link fetching and start the scheduler
     '''
     
+
     #start the link fetcher
     check_link_fetcher()
 
@@ -465,12 +470,12 @@ def init():
 
     
     #create scheduled events    
-    every(3).seconds.do(check_queues)
+    every(1).seconds.do(check_queues)
     every(1).minutes.do(collect_metrics)
     every(5).minutes.do(s3_upload_logs)
     every(12).hours.do(check_link_fetcher)
-    every(5).minutes.do(check_downloads_folder_size)
-    every(1).seconds.do(do_downloads)
+    #every(1).minutes.do(check_downloads_folder_size)
+    every(2).seconds.do(do_downloads)
     
     #start the scheduler
     while True:

@@ -10,6 +10,7 @@ from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, D
 from log_manager import log
 from thread_manager import  download_queue
 
+
 aria2 = None
 aria2_client = None
 gids = {}

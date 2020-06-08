@@ -16,11 +16,12 @@ from thread_manager import lock
 from log_manager import log
 from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, INCLUDE_TILES_FILE
 
+
 file_handle = None
 def file_is_locked():
     '''
-    Ref - #https://stackoverflow.com/questions/14406562/prevent-running-concurrent-instances-of-a-python-script
-
+        check if file is already locked by current running process
+        Ref - #https://stackoverflow.com/questions/14406562/prevent-running-concurrent-instances-of-a-python-script
     '''
     global file_handle 
     file_handle= open(LOCK_FILE, 'w')
@@ -29,6 +30,12 @@ def file_is_locked():
         return False
     except IOError:
         return True
+
+def get_download_folder_size():
+    '''
+        get download folder size
+    '''
+    return int(get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024))
 
 def parse_size(size):
     '''

@@ -8,6 +8,7 @@ parser.read(f'{path.dirname(path.dirname(path.abspath(__file__)))}/settings.ini'
 
 #extract settings
 DEBUG = parser.getboolean('aws','debug')
+MAX_CONCURRENT_INTHUB_LIMIT = parser.getint('aws', 'max_concurrent_inthub_limit')
 FETCH_LINKS = parser.getboolean('aws', 'fetch_links')
 DOWNLOAD_DAY = parser.get('aws', 'download_day')
 if DOWNLOAD_DAY.strip() == '' or  DOWNLOAD_DAY.strip().lower() == 'none':
