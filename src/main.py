@@ -11,6 +11,7 @@ from sys import exit
 from colorama import init as colorama_init, Fore, Back, Style
 from termcolor import colored
 from schedule import every, run_pending
+from re import search
 
 #import custom functions
 from download_manager import add_download_url, get_active_urls
@@ -87,6 +88,15 @@ def upload_file(file_path):
     '''
     filename = basename(file_path)
     filename = filename.replace('zip','SAFE')
+
+    if bool(search(r"[.][0-9][.]zip", file_path)) == True:
+        #this happens when a file is downloaded twice S2A_MSIL1C_20200607T182921_N0209_R027_T23XML_20200607T221227.1.zip
+        if(DEBUG):
+            print(Fore.RED + f'{str(datetime.now())}, duplicate file downloaded {file_path}')
+        log(f'duplicate file downloaded {file_path}','error')
+        remove_file(file_path)
+        return
+
 
     try:
         lock.acquire()
@@ -241,10 +251,11 @@ def download_file():
                 print(f'{str(datetime.now())}, {granule_to_download_count} left to download for {DOWNLOAD_DAY}')
             log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
         else:
+            #when all the files for given day are downloaded, set download day to latest available day
             DOWNLOAD_DAY = granule_to_download.beginposition.strftime("%Y-%m-%d")
             if DEBUG:
-                print(f"{str(datetime.now())}, no download day specified so setting download day to {DOWNLOAD_DAY}")
-            log(f"no download day specified so setting download day to {DOWNLOAD_DAY}", "status")
+                print(f"{str(datetime.now())}, no other download day specified so setting download day to {DOWNLOAD_DAY}")
+            log(f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
             db.close()
             lock.release()
             return
@@ -275,6 +286,7 @@ def download_file():
         granule_expected_checksum = granule_to_download.checksum
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
+            #checksum matched that means file is already downloaded
             if DEBUG:
                 print(f"{str(datetime.now())}, found existing file in downloads dir = {filename}")
             log(f"{str(datetime.now())}, found existing file in downloads dir = {filename}", "status")
@@ -285,6 +297,9 @@ def download_file():
                 
             return
     
+    if is_active_url(granule_to_download.download_url):
+        #file is already being downloaded
+        return
 
     #check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
@@ -315,6 +330,19 @@ def download_file():
         granule_to_download.save()
         db.close()
         lock.release()
+
+def is_active_url(url):
+    '''
+        check if already an active url in aria2's download queue
+    '''
+    active_urls = get_active_urls()
+    for item in active_urls:
+        for file in item['files']:
+            for uri in file['uris']:
+                if uri['uri'].lower() == url.lower():
+                    return True
+    
+    return False
 
 def upload_orphan_downloads():
     '''
@@ -462,6 +490,8 @@ def init():
     '''
         Initilize the link fetching and start the scheduler
     '''
+
+    clean_up_downloads()
 
     #start the link fetcher
     check_link_fetcher()
