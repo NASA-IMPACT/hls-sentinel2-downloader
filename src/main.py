@@ -1,7 +1,7 @@
 #import external packages
 from time import sleep
 from multiprocessing import Process
-from os import remove, path, listdir
+from os import path, listdir
 from models import status,  granule, db
 from log_manager import log
 from settings import DEBUG
@@ -509,7 +509,7 @@ def init():
     #create scheduled events    
     every(1).seconds.do(run_threaded, check_queues)
     every(1).minutes.do(run_threaded, collect_metrics)
-    every(5).minutes.do(run_threaded, s3_upload_logs)
+    every(2).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)

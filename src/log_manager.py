@@ -1,11 +1,11 @@
 #import external packages
-from os import remove, walk
+from os import walk, path
 from boto3 import client, s3
 from logging import getLogger, handlers as log_handlers, DEBUG
-from datetime import datetime
+from datetime import datetime, timedelta
 
 #import internal functions
-from settings import LOGS_PATH, S3_LOG_BUCKET
+from settings import LOGS_PATH, S3_LOG_BUCKET, DEBUG
 
 s3_client = client('s3')
 
@@ -68,21 +68,31 @@ def s3_upload_logs():
 
     global transfer_config
 
+    now = datetime.now()
     for (root,dirs,files) in walk(LOGS_PATH): 
         for item in files:
-            if 'status' in item:
-                key = f'status/{item}'
-            elif 'links' in item:
-                key = f'links/{item}'
-            elif 'downloads' in item:
-                key = f'downloads/{item}'
-            elif 'metrics' in item:
-                key = f'metrics/{item}'
-            elif 'error' in item:
-                key = f'error/{item}'
+            #upload logs which were modifed in last 5 minutes
+            modify_date = datetime.fromtimestamp(path.getmtime(f'{LOGS_PATH}/{item}'))
+            modify_date_5minutes_ago = now + timedelta(minutes=-5)
+            if modify_date > modify_date_5minutes_ago:
+                if 'status' in item:
+                    key = f'status/{item}'
+                elif 'links' in item:
+                    key = f'links/{item}'
+                elif 'downloads' in item:
+                    key = f'downloads/{item}'
+                elif 'metrics' in item:
+                    key = f'metrics/{item}'
+                elif 'error' in item:
+                    key = f'error/{item}'
 
-            try:
-                s3_client.upload_file(f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
-            except Exception as e:
-                log(f'error during uploading logs: {str(e)}','error')
+                try:
+                    s3_client.upload_file(f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
+                    if DEBUG:
+                        print(f'{str(datetime.now())}, log file {LOGS_PATH}/{item} uploaded to {S3_LOG_BUCKET}/{key}')
+                    log(f'log file {LOGS_PATH}/{item} uploaded to {S3_LOG_BUCKET}/{key}','status')
+                except Exception as e:
+                    if DEBUG:
+                        print(f'error during uploading logs: {str(e)}')
+                    log(f'error during uploading logs: {str(e)}','error')
                 

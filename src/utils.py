@@ -127,6 +127,9 @@ def clean_up_downloads():
     '''
         remove all files in the downloads folder
     '''
+    if(DEBUG):
+        print(f'{str(datetime.now())}, cleaning up the downloads folder')
+    log(f'cleaning up the downloads folder','status')  
     files = glob(f'{DOWNLOADS_PATH}/*.*')
     for f in files:
         remove_file(f)
