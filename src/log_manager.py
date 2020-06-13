@@ -48,7 +48,11 @@ def log(msg,type):
     '''
         based on type decide the log format
     '''
-
+    #TODO add print statement here
+    #TODO figure out way to capture nohup output
+    #TODO add error logs to status logs as well?
+    #TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
+    #TODO make sure nohup output and status log have same content
     if type == 'status':
         status_logger.info(f'{str(datetime.now())}, {msg}')
     elif type == 'links':
@@ -71,10 +75,10 @@ def s3_upload_logs():
     now = datetime.now()
     for (root,dirs,files) in walk(LOGS_PATH): 
         for item in files:
-            #upload logs which were modifed in last 5 minutes
+            #upload logs which were modifed in last 30 minutes
             modify_date = datetime.fromtimestamp(path.getmtime(f'{LOGS_PATH}/{item}'))
-            modify_date_5minutes_ago = now + timedelta(minutes=-5)
-            if modify_date > modify_date_5minutes_ago:
+            modify_date_30minutes_ago = now + timedelta(minutes=-30)
+            if modify_date > modify_date_30minutes_ago:
                 if 'status' in item:
                     key = f'status/{item}'
                 elif 'links' in item:

@@ -252,6 +252,7 @@ def download_file():
             log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
         else:
             #when all the files for given day are downloaded, set download day to latest available day
+            #TODO: add logic to not download files older than 14 days
             DOWNLOAD_DAY = granule_to_download.beginposition.strftime("%Y-%m-%d")
             if DEBUG:
                 print(f"{str(datetime.now())}, no other download day specified so setting download day to {DOWNLOAD_DAY}")

@@ -159,5 +159,12 @@ def get_folder_size(p):
         get folder size
     '''
     root_directory = Path(p)
-    return sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
+    try:
+        size = sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
+    except Exception as e:
+        size = -1
+        if(DEBUG):
+            print(f'{str(datetime.now())}, error during getting folder size {str(e)}')
+        log(f'error during getting folder size{str(e)}','error')   
 
+    return size
