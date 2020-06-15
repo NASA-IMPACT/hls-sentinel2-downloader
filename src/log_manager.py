@@ -110,11 +110,6 @@ def s3_upload_logs():
             try:
                 s3_client.upload_file(
                     f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
-                if DEBUG:
-                    print(
-                        f'{str(datetime.now())}, log file {LOGS_PATH}/{item} uploaded to {S3_LOG_BUCKET}/{key}')
                 log(f'log file {LOGS_PATH}/{item} uploaded to {S3_LOG_BUCKET}/{key}', 'status')
             except Exception as e:
-                if DEBUG:
-                    print(f'error during uploading logs: {str(e)}')
                 log(f'error during uploading logs: {str(e)}', 'error')
