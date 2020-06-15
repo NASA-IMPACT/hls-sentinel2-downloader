@@ -1,41 +1,45 @@
-#import existing packages
+# import existing packages
 from datetime import datetime
 from hashlib import md5
 from glob import glob
 from os import remove, path, getcwd, getpid
-from psutil import process_iter,virtual_memory, Process
+from psutil import process_iter, virtual_memory, Process
 from dateparser import parse as dateparser_parse
 from re import match, sub
 from fcntl import lockf, LOCK_EX, LOCK_NB
 from colorama import Fore
 from pathlib import Path
 
-#import custom functions
-from models import  granule, db
+# import custom functions
+from models import granule, db
 from thread_manager import lock
 from log_manager import log
 from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, INCLUDE_TILES_FILE
 
 
 file_handle = None
+
+
 def file_is_locked():
     '''
         check if file is already locked by current running process
         Ref - #https://stackoverflow.com/questions/14406562/prevent-running-concurrent-instances-of-a-python-script
     '''
-    global file_handle 
-    file_handle= open(LOCK_FILE, 'w')
+    global file_handle
+    file_handle = open(LOCK_FILE, 'w')
     try:
         lockf(file_handle, LOCK_EX | LOCK_NB)
         return False
     except IOError:
         return True
 
+
 def get_download_folder_size():
     '''
         get download folder size
     '''
     return int(get_folder_size(DOWNLOADS_PATH) / (1024*1024*1024))
+
 
 def parse_size(size):
     '''
@@ -57,6 +61,7 @@ def convert_date(date_str):
     '''
     return dateparser_parse(date_str)
 
+
 def get_checksum_local(file_path):
     '''
         get checksum of a file using md5
@@ -68,8 +73,6 @@ def get_checksum_local(file_path):
         hash = md5(open(file_path, 'rb').read()).hexdigest()
     except Exception as e:
         hash = ''
-        if DEBUG:
-            print(Fore.RED + f"{str(datetime.now())}, error during md5 {str(e)}")
         log(f"error during md5 {str(e)}", "error")
 
     return hash
@@ -82,8 +85,9 @@ def get_include_tiles_list():
     tiles = []
     with open(f'{INCLUDE_TILES_FILE}') as f:
         for line in f:
-            tiles.append(line.strip()) 
+            tiles.append(line.strip())
     return tiles
+
 
 def update_ignore_links_in_datebase():
     '''
@@ -91,49 +95,46 @@ def update_ignore_links_in_datebase():
     '''
     lock.acquire()
     db.connect()
-    query = granule.update(ignore_file=True).where(granule.tileid.not_in(get_include_tiles_list()))
+    query = granule.update(ignore_file=True).where(
+        granule.tileid.not_in(get_include_tiles_list()))
     print(query.sql())
     query.execute()
     db.close()
     lock.release()
+
 
 def kill_downloader():
     '''
         kill existing running aria2 process
     '''
     for proc in process_iter():
-        #print(proc.name().lower())
+        # print(proc.name().lower())
         if proc.name().lower() == 'aria2c':
             proc.kill()
-            if DEBUG:
-                print(Fore.RED + f"{str(datetime.now())}, existing aria2c process killed")
             log(f"existing aria2c process killed", "status")
+
 
 def remove_file(file_path):
     '''
         remove a file
     '''
     try:
-        if(DEBUG):
-            print(f'{str(datetime.now())}, removing file {file_path}')
-        log(f'removing file {file_path}','status')  
+        log(f'removing file {file_path}', 'status')
         remove(file_path)
     except Exception as e:
-        if(DEBUG):
-            print(f'{str(datetime.now())}, error: cannot remove {file_path} {str(e)}')
-        log(f'cannot remove {file_path} {str(e)}','error')   
+        log(f'error: cannot remove {file_path} {str(e)}', 'error')
+
 
 def clean_up_downloads():
     '''
         remove all files in the downloads folder
     '''
-    if(DEBUG):
-        print(f'{str(datetime.now())}, cleaning up the downloads folder')
-    log(f'cleaning up the downloads folder','status')  
+    log(f'cleaning up the downloads folder', 'status')
     files = glob(f'{DOWNLOADS_PATH}/*.*')
     for f in files:
         remove_file(f)
-    
+
+
 def get_memory_usage():
     '''
         Prints current memory usage stats.
@@ -148,11 +149,13 @@ def get_memory_usage():
     percent = virtual_memory().percent
     used = virtual_memory().used
     free = virtual_memory().free
- 
-    total, available, used, free = total / MEGA, available / MEGA, used / MEGA, free / MEGA
+
+    total, available, used, free = total / \
+        MEGA, available / MEGA, used / MEGA, free / MEGA
     proc = PROCESS.memory_info()[1] / MEGA
-    
+
     return f'Memory Stat: process = {proc}, total = {total}, available = {available}, used = {used}, free = {free}, percent = {percent}'
+
 
 def get_folder_size(p):
     '''
@@ -160,11 +163,10 @@ def get_folder_size(p):
     '''
     root_directory = Path(p)
     try:
-        size = sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
+        size = sum(f.stat().st_size for f in root_directory.glob(
+            '**/*') if f.is_file())
     except Exception as e:
         size = -1
-        if(DEBUG):
-            print(f'{str(datetime.now())}, error during getting folder size {str(e)}')
-        log(f'error during getting folder size{str(e)}','error')   
+        log(f'error during getting folder size {str(e)}', 'error')
 
     return size

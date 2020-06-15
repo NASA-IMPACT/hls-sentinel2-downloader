@@ -1,25 +1,30 @@
 
-#import external packages
+# import external packages
 from peewee import *
 
-#import internal functions
+# import internal functions
 from thread_manager import lock
 from settings import DB_HOST, DB_NAME, DB_PASS, DB_PORT, DB_USER
 
-#create database instance
-db = MySQLDatabase(DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
+# create database instance
+db = MySQLDatabase(DB_NAME, user=DB_USER, password=DB_PASS,
+                   host=DB_HOST, port=DB_PORT)
 
 
 '''
     peewee database tables definition
 '''
+
+
 class BaseModel(Model):
     class Meta:
         database = db
 
+
 class status(BaseModel):
     key_name = CharField(primary_key=True)
     value = TextField()
+
 
 class granule_count(BaseModel):
     date = DateField(primary_key=True)
@@ -29,7 +34,7 @@ class granule_count(BaseModel):
 
 
 class granule(BaseModel):
-    id = CharField(primary_key=True,index=True)
+    id = CharField(primary_key=True, index=True)
     filename = TextField()
     tileid = TextField()
     size = BigIntegerField()
@@ -47,13 +52,17 @@ class granule(BaseModel):
     download_failed = DateTimeField(default=False)
     retry = IntegerField(default=0)
 
+
 table_list = [status, granule_count, granule]
+
 
 def create_tables():
     db.create_tables(table_list)
 
+
 def drop_tables():
     db.drop_tables(table_list)
+
 
 '''
     create tables if they don't exists
@@ -64,9 +73,7 @@ create_tables()
 db.close()
 lock.release()
 
-
-
-#create default status keys
+# create default status keys
 lock.acquire()
 db.connect()
 

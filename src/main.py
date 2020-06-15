@@ -1,4 +1,4 @@
-#import external packages
+# import external packages
 from time import sleep
 from multiprocessing import Process
 from os import path, listdir
@@ -13,7 +13,7 @@ from termcolor import colored
 from schedule import every, run_pending
 from re import search
 
-#import custom functions
+# import custom functions
 from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
 from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size
@@ -24,10 +24,12 @@ from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, FETCH_LINKS
 from thread_manager import lock, download_queue, upload_queue, Thread, active_count
 
 
-colorama_init(autoreset=True) #required to print colors in both UNIX and Windows OS
+# required to print colors in both UNIX and Windows OS
+colorama_init(autoreset=True)
 fetch_links_worker = None
 upload_orphan_downloads_worker = None
 download_file_worker = None
+
 
 def check_downloads_folder_size():
     '''
@@ -39,16 +41,16 @@ def check_downloads_folder_size():
 
     if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
         if download_folder_size > 100:
-            upload_orphan_downloads_worker = Thread(name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
+            upload_orphan_downloads_worker = Thread(
+                name="upload_orphan_downloads", target=upload_orphan_downloads, args=())
             upload_orphan_downloads_worker.start()
-    
+
     if download_folder_size > 600:
-        #download folder's size has reached above 500GB that means something must be terribly went wrong
-        #it should never reach to this size under normal operating conditions
-        #TODO: raise the alert
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, download folder size reached above 600GB, cleaning up old downloads')
-        log(f'download folder size reached above 600GB, cleaning up old downloads','error')
+        # download folder's size has reached above 500GB that means something must be terribly went wrong
+        # it should never reach to this size under normal operating conditions
+        # TODO: raise the alert
+
+        log(f'download folder size reached above 600GB, cleaning up old downloads', 'error')
         clean_up_downloads()
 
 
@@ -57,7 +59,9 @@ def check_link_fetcher():
         check if the link fetcher is running or not, if not start it again
     '''
     if FETCH_LINKS == True and (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
-        Thread(name="start_links_fetch", target=start_links_fetch, args=()).start()
+        Thread(name="start_links_fetch",
+               target=start_links_fetch, args=()).start()
+
 
 def start_links_fetch():
     '''
@@ -69,39 +73,36 @@ def start_links_fetch():
 
     try:
 
-        #continue fetching links for the last 14 days
-        while fetch_day >= date.today() + timedelta(days=-14):  
+        # continue fetching links for the last 14 days
+        while fetch_day >= date.today() + timedelta(days=-14):
             fetch_day = fetch_day + timedelta(days=-1)
-            fetch_links_worker = Thread(name="fetch_links_worker", target=fetch_links, args=(fetch_day,))
+            fetch_links_worker = Thread(
+                name="fetch_links_worker", target=fetch_links, args=(fetch_day,))
             fetch_links_worker.start()
             if fetch_links_worker.isAlive() == False:
                 sleep(3)
             fetch_links_worker.join()
     except RuntimeError as runtime_err:
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, RuntimeError: {str(runtime_err)}')
-        log(f'RuntimeError: {str(runtime_err)}','error')
-         
+        log(f'RuntimeError: {str(runtime_err)}', 'error')
+
+
 def upload_file(file_path):
     '''
         upload given file to S3 and set flag in the database
     '''
     filename = basename(file_path)
-    filename = filename.replace('zip','SAFE')
+    filename = filename.replace('zip', 'SAFE')
 
     if bool(search(r"[.][0-9][.]zip", file_path)) == True:
-        #this happens when a file is downloaded twice S2A_MSIL1C_20200607T182921_N0209_R027_T23XML_20200607T221227.1.zip
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, duplicate file downloaded {file_path}')
-        log(f'duplicate file downloaded {file_path}','error')
+        # this happens when a file is downloaded twice S2A_MSIL1C_20200607T182921_N0209_R027_T23XML_20200607T221227.1.zip
+        log(f'duplicate file downloaded {file_path}', 'error')
         remove_file(file_path)
         return
-
 
     try:
         lock.acquire()
         db.connect()
-        query = granule.select().where(granule.filename==filename).limit(1).offset(0)
+        query = granule.select().where(granule.filename == filename).limit(1).offset(0)
         granule_to_download = query.get()
         granule_to_download.downloaded = True
         granule_to_download.in_progress = False
@@ -113,76 +114,75 @@ def upload_file(file_path):
 
         granule_to_download_size = granule_to_download.size
 
-        log(f'{filename},{granule_to_download_size}','downloads')
+        log(f'file downloaded {file_path}, {granule_to_download_size}', 'status')
+        log(f'{filename},{granule_to_download_size}', 'downloads')
 
-        #verify the checksum before uploading a file to S3
-        granule_expected_checksum = granule_to_download.checksum  
+        # verify the checksum before uploading a file to S3
+        granule_expected_checksum = granule_to_download.checksum
         granule_downloaded_checksum = get_checksum_local(file_path)
-    
+
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
-            s3_upload_worker = Thread(name=f'upload {filename}',target=s3_upload_file,args=(file_path,granule_to_download.beginposition,))
+            s3_upload_worker = Thread(name=f'upload {filename}', target=s3_upload_file, args=(
+                file_path, granule_to_download.beginposition,))
             s3_upload_worker.start()
         else:
-            if(DEBUG):
-                print(Fore.RED + f'{str(datetime.now())}, checksum did not match for {file_path}')
-            log(f'checksum did not match for {file_path}','error')
-            upload_queue.put({"file_path":file_path,"success":False})
+            log(f'checksum did not match for {file_path}', 'error')
+            upload_queue.put({"file_path": file_path, "success": False})
 
         lock.acquire()
         db.connect()
-        last_file_download_time = status.get(status.key_name == 'last_file_download_time')
+        last_file_download_time = status.get(
+            status.key_name == 'last_file_download_time')
         last_file_download_time.value = str(datetime.now())
         last_file_download_time.save()
         db.close()
         lock.release()
 
     except MemoryError as memory_err:
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, Memory Error')
+        log(f'Memory Error', 'error')
         remove_file(file_path)
-        log(f'Memory Error','error')
     except UnicodeDecodeError as unicode_error:
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, Unicode decode error during download of {file_path}')
+        log(f'Unicode decode error during download of {file_path}', 'error')
         remove_file(file_path)
-        log(f'Unicode decode error during download of {file_path}','error')
     except Exception as e:
-        if(DEBUG):
-            print(Fore.RED + f'{str(datetime.now())}, error during file_downloaded event: {str(e)},{file_path}')
+        log(f'error during file_downloaded event: {str(e)}', 'error')
         remove_file(file_path)
-        log(f'error during file_downloaded event: {str(e)}','error')
+
 
 def requeue_retry_failed(DOWNLOAD_DAY=None):
     '''
         requeue the failed downloads by resetting flags in the database
     '''
     try:
-       
+
         if not DOWNLOAD_DAY is None:
-            start_date = str(DOWNLOAD_DAY) + " 00:00:00"  #MySQL format
-            end_date = str(DOWNLOAD_DAY) + " 23:59:59"    #MySQL format
+            start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
+            end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
 
             lock.acquire()
             db.connect()
 
-            query = granule.select().where(granule.download_failed == True).where(granule.beginposition.between(start_date, end_date))
-            
+            query = granule.select().where(granule.download_failed == True).where(
+                granule.beginposition.between(start_date, end_date))
+
             failed_count = query.count()
 
             if(failed_count > 0):
 
-                #reset failed downloads
-                granule.update(download_failed=False,downloaded=False,in_progress=False,uploaded=False).where(granule.download_failed == True).where(granule.beginposition.between(start_date, end_date)).execute() #.where(granule.retry < 5)
-                
-                #reset failed uploads
-                granule.update(in_progress=False,downloaded=False,download_failed=False).where(granule.uploaded == False).where(granule.beginposition.between(start_date, end_date)).execute()
-                
-                #reset all in progress flags
-                granule.update(in_progress=False).where(granule.beginposition.between(start_date, end_date)).execute()
+                # reset failed downloads
+                granule.update(download_failed=False, downloaded=False, in_progress=False, uploaded=False).where(
+                    granule.download_failed == True).where(granule.beginposition.between(start_date, end_date)).execute()  # .where(granule.retry < 5)
 
-                if DEBUG:
-                    print(f"{str(datetime.now())}, resettting download failed flag for {DOWNLOAD_DAY}")
-                log(f"resettting download failed flag for {DOWNLOAD_DAY}", "status")
+                # reset failed uploads
+                granule.update(in_progress=False, downloaded=False, download_failed=False).where(
+                    granule.uploaded == False).where(granule.beginposition.between(start_date, end_date)).execute()
+
+                # reset all in progress flags
+                granule.update(in_progress=False).where(
+                    granule.beginposition.between(start_date, end_date)).execute()
+
+                log(
+                    f"resettting download failed flag for {DOWNLOAD_DAY}", "status")
                 db.close()
                 lock.release()
                 return True
@@ -194,33 +194,32 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
             lock.acquire()
             db.connect()
 
-            #reset failed downloads
-            granule.update(in_progress=False,downloaded=False,download_failed=False,uploaded=False).where(granule.download_failed == True).execute()
-            
-            #reset failed uploads
-            granule.update(in_progress=False,downloaded=False,download_failed=False).where(granule.uploaded == False).execute()
-            
-            #reset all in progress flags
-            granule.update(in_progress=False).execute() 
+            # reset failed downloads
+            granule.update(in_progress=False, downloaded=False, download_failed=False,
+                           uploaded=False).where(granule.download_failed == True).execute()
 
-            if DEBUG:
-                print(f"{str(datetime.now())}, resetting flags to download all remaining files")
+            # reset failed uploads
+            granule.update(in_progress=False, downloaded=False, download_failed=False).where(
+                granule.uploaded == False).execute()
+
+            # reset all in progress flags
+            granule.update(in_progress=False).execute()
+
             log(f"resetting flags to download all remaining files", "status")
             db.close()
             lock.release()
             return True
-    
+
     except Exception as e:
-        if DEBUG:
-            print(Fore.RED + f"{str(datetime.now())}, failed resettting download failed flag")
         log(f"failed resettting download failed flag", "error")
         return False
+
 
 def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
-    global DOWNLOAD_DAY # should be in format Y-m-d
+    global DOWNLOAD_DAY  # should be in format Y-m-d
 
     query = (
         granule.select()
@@ -232,9 +231,10 @@ def download_file():
     )
 
     if not DOWNLOAD_DAY is None:
-        start_date = str(DOWNLOAD_DAY) + " 00:00:00"  #MySQL format
-        end_date = str(DOWNLOAD_DAY) + " 23:59:59"    #MySQL format
-        query = query.where(granule.beginposition.between(start_date, end_date))
+        start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
+        end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
+        query = query.where(
+            granule.beginposition.between(start_date, end_date))
 
     query = query.order_by(granule.beginposition.desc())
 
@@ -247,25 +247,21 @@ def download_file():
         granule_to_download_count = query.count()
 
         if not DOWNLOAD_DAY == None:
-            if DEBUG:
-                print(f'{str(datetime.now())}, {granule_to_download_count} left to download for {DOWNLOAD_DAY}')
             log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
         else:
-            #when all the files for given day are downloaded, set download day to latest available day
-            #TODO: add logic to not download files older than 14 days
-            DOWNLOAD_DAY = granule_to_download.beginposition.strftime("%Y-%m-%d")
-            if DEBUG:
-                print(f"{str(datetime.now())}, no other download day specified so setting download day to {DOWNLOAD_DAY}")
-            log(f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
+            # when all the files for given day are downloaded, set download day to latest available day
+            # TODO: add logic to not download files older than 14 days
+            DOWNLOAD_DAY = granule_to_download.beginposition.strftime(
+                "%Y-%m-%d")
+            log(
+                f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
             db.close()
             lock.release()
             return
 
     except Exception as e:
-
-        if DEBUG:
-            print(f"{str(datetime.now())}, No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})")
-        log(f"No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})", "status")
+        log(
+            f"No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})", "status")
 
         db.close()
         lock.release()
@@ -281,28 +277,24 @@ def download_file():
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
 
-    
-    #check if file is already downloaded with valid checksum in the downloads folder
+    # check if file is already downloaded with valid checksum in the downloads folder
     if path.exists(file_path):
         granule_expected_checksum = granule_to_download.checksum
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
-            #checksum matched that means file is already downloaded
-            if DEBUG:
-                print(f"{str(datetime.now())}, found existing file in downloads dir = {filename}")
+            # checksum matched that means file is already downloaded
             log(f"{str(datetime.now())}, found existing file in downloads dir = {filename}", "status")
-            
-            #upload only if upload_orphan_downloads_worker is not running
+            # upload only if upload_orphan_downloads_worker is not running
             if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
-                download_queue.put({"file_path":file_path,"success":True})
-                
+                download_queue.put({"file_path": file_path, "success": True})
             return
-    
+
     if is_active_url(granule_to_download.download_url):
-        #file is already being downloaded
+        # file is already being downloaded
+        log(f"{str(datetime.now())}, file {granule_to_download.download_url} is already in download queue", "status")
         return
 
-    #check if file is already uploaded to S3
+    # check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
         lock.acquire()
         db.connect()
@@ -315,13 +307,9 @@ def download_file():
 
         download = add_download_url(granule_to_download.download_url)
 
-        if DEBUG:
-            print(f"{str(datetime.now())}, downloading file {filename} (retry = {granule_to_download.retry}) for day {str(granule_to_download.beginposition)}")
-        log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}","status",)
-   
+        log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}", "status",)
+
     else:
-        if DEBUG:
-            print(f"{str(datetime.now())}, file already uploaded = {filename}")
         log(f"file already uploaded = {filename}", "status")
 
         lock.acquire()
@@ -331,6 +319,7 @@ def download_file():
         granule_to_download.save()
         db.close()
         lock.release()
+
 
 def is_active_url(url):
     '''
@@ -342,8 +331,9 @@ def is_active_url(url):
             for uri in file['uris']:
                 if uri['uri'].lower() == url.lower():
                     return True
-    
+
     return False
+
 
 def upload_orphan_downloads():
     '''
@@ -351,28 +341,23 @@ def upload_orphan_downloads():
         this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and 
         download folder was getting filled up pretty fast
     '''
-    if(DEBUG):
-        print(f'{str(datetime.now())}, checking downloads folder for orphan files that were downloaded but not uploaded')
-    log('checking downloads folder for orphan files that were downloaded but not uploaded','status')
-  
-    all_zip_files = filter(lambda x: x.endswith('.zip'), listdir(DOWNLOADS_PATH))
-   
+    log('checking downloads folder for orphan files that were downloaded but not uploaded', 'status')
+
+    all_zip_files = filter(lambda x: x.endswith('.zip'),
+                           listdir(DOWNLOADS_PATH))
+
     now = datetime.now()
     for f in all_zip_files:
         file_path = f'{DOWNLOADS_PATH}/{f}'
         try:
             modify_date = datetime.fromtimestamp(path.getmtime(file_path))
-            modify_date_2hr_ago= now + timedelta(hours=-2)
+            modify_date_2hr_ago = now + timedelta(hours=-2)
             if modify_date < modify_date_2hr_ago:
-                if(DEBUG):
-                    print(Fore.GREEN + f'{str(datetime.now())}, uploading {file_path} with time {modify_date}')
-                log(f'uploading {file_path} with time {modify_date}','status')
+                log(f'uploading {file_path} with time {modify_date}', 'status')
                 upload_file(file_path)
         except Exception as e:
-            if(DEBUG):
-                print(Fore.RED + f'{str(datetime.now())}, error during running orphan file checker {str(e)}')
-            log(f'error during running orphan file checker {str(e)}','error')
-  
+            log(f'error during running orphan file checker {str(e)}', 'error')
+
 
 def do_downloads():
     '''
@@ -380,49 +365,43 @@ def do_downloads():
     '''
     global download_file_worker
 
-    if DEBUG:
-        print(f"{str(datetime.now())}, #threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB")
-        print(f"{str(datetime.now())}, {get_memory_usage()}")
-    log(f"#threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB","status")
+    log(f"#threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    log(f"{get_memory_usage()}", "status")
 
-   
-    #if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
+    # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
     if (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
-         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT
+        maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT
     else:
-         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
+        maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
     if len(get_active_urls()) < maximum_downloads:
         try:
             if download_file_worker == None or download_file_worker.isAlive() == False:
-                download_file_worker = Thread(name="download_file_worker", target=download_file, args=())
+                download_file_worker = Thread(
+                    name="download_file_worker", target=download_file, args=())
                 download_file_worker.start()
         except Exception as e:
-            if DEBUG:
-                print(Fore.RED + f"{str(datetime.now())}, error during initiaing_downloads:{str(e)}", "status")
             log(f"error during initiaing downloads:{str(e)}", "status")
+
 
 def check_queues():
     '''
         check both downloaded or uploaded files queue, perform upload and clean up
     '''
-    #check download queue
+    # check download queue
     if not download_queue.empty():
         item = download_queue.get()
-        
+
         # if item is successfully downloaded, attempt upload otherwise, mark as failed in the database
         if item['success'] == True:
             file_path = item['file_path']
-            if(DEBUG):
-                print(f'{str(datetime.now())}, file downloaded {file_path}')
-            filename = basename(file_path)
-            log(f'file downloaded = {filename}','status')
             upload_file(file_path)
         elif item['success'] == False:
             failed_url = item['url']
             lock.acquire()
             db.connect()
-            granule_failed= granule.select().where(granule.download_url==failed_url).get()
+            granule_failed = granule.select().where(
+                granule.download_url == failed_url).get()
             granule_failed.downloaded = False
             granule_failed.in_progress = False
             granule_failed.download_failed = True
@@ -430,46 +409,39 @@ def check_queues():
             db.close()
             lock.release()
 
-            if(DEBUG):
-                print(Fore.RED + f'{str(datetime.now())}, file aborted = {granule_failed.filename} ({failed_url}) retry={granule_failed.retry} attempts')
-            log(f'file aborted = {granule_failed.filename} ({failed_url})  retry={granule_failed.retry} attempts','error')
+            log(f'file aborted = {granule_failed.filename} ({failed_url})  retry={granule_failed.retry} attempts', 'error')
 
-    #check the upload queue        
+    # check the upload queue
     if not upload_queue.empty():
         item = upload_queue.get()
         file_path = item['file_path']
         filename = basename(file_path)
-        filename = filename.replace('zip','SAFE')
+        filename = filename.replace('zip', 'SAFE')
 
-        #if file is successfully uploaded to S3, mark uploaded=True in the database and remove the file
+        # if file is successfully uploaded to S3, mark uploaded=True in the database and remove the file
         if item['success'] == True:
-            
-            if(DEBUG):
-                print(Fore.GREEN + f'{str(datetime.now())}, file uploaded {file_path}')
 
-            log(f'file uploaded = {filename}','status')
+            log(f'file uploaded = {filename}', 'status')
 
             lock.acquire()
             db.connect()
             try:
-                query = granule.select().where(granule.filename==filename).limit(1).offset(0)
-                granule_to_download= query.get()
+                query = granule.select().where(granule.filename == filename).limit(1).offset(0)
+                granule_to_download = query.get()
                 granule_to_download.uploaded = True
                 granule_to_download.downloaded = True
                 granule_to_download.download_failed = False
                 granule_to_download.in_progress = False
                 granule_to_download.save()
             except Exception as e:
-                if(DEBUG):
-                    print(Fore.RED + f'{str(datetime.now())}, error: cannot set uploaded = True:{str(e)}')
-                log(f'cannot set uploaded = True:{str(e)}','error')    
+                log(f'error: cannot set uploaded = True:{str(e)}', 'error')
             db.close()
             lock.release()
 
         else:
             lock.acquire()
             db.connect()
-            query = granule.select().where(granule.filename==filename).limit(1).offset(0)
+            query = granule.select().where(granule.filename == filename).limit(1).offset(0)
             granule_to_download = query.get()
             granule_to_download.downloaded = False
             granule_to_download.in_progress = False
@@ -480,12 +452,13 @@ def check_queues():
             db.close()
             lock.release()
 
-        
         remove_file(file_path)
-         
+
+
 def run_threaded(job_func):
     job_thread = Thread(target=job_func)
     job_thread.start()
+
 
 def init():
     '''
@@ -494,43 +467,36 @@ def init():
 
     clean_up_downloads()
 
-    #start the link fetcher
+    # start the link fetcher
     check_link_fetcher()
 
-    #kill existing aria2 instance
+    # kill existing aria2 instance
     kill_downloader()
 
-    #requeue all the failed download by resetting flags in the database, either for a given day or for all days
+    # requeue all the failed download by resetting flags in the database, either for a given day or for all days
     if not DOWNLOAD_DAY is None:
         requeue_retry_failed(DOWNLOAD_DAY)
     else:
         requeue_retry_failed()
 
-    
-    #create scheduled events    
+    # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
     every(1).minutes.do(run_threaded, collect_metrics)
-    every(2).minutes.do(s3_upload_logs)
+    every(5).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
-    
-    #start the scheduler
+
+    # start the scheduler
     while True:
         run_pending()
         sleep(1)
 
-#check if any previous instance is already running
+
+# check if any previous instance is already running
 if file_is_locked():
-    if DEBUG:
-        print (Fore.RED + f'{str(datetime.now())}, Can not start the downloader: another instance is running')
-        log(f'Can not start the downloader: another instance is running','error')
+    log(f'Can not start the downloader: another instance is running', 'error')
     exit(0)
 else:
-    if DEBUG:
-        print(f'{str(datetime.now())}, Starting the downloader: no other instance is running found')
-    log(f'Starting the downloader: no other instance is running found','status')
+    log(f'Starting the downloader: no other instance is running found', 'status')
     init()
-
-
-

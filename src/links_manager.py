@@ -1,12 +1,12 @@
-#import external packages
+# import external packages
 from json import dumps as json_dump
 from requests import get
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 from thread_manager import lock
 
-#import internal functions
-from models import status,granule_count,granule,db
+# import internal functions
+from models import status, granule_count, granule, db
 from utils import parse_size, convert_date, get_include_tiles_list
 from log_manager import log
 from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DEBUG
@@ -35,10 +35,10 @@ DEFAULT_TILE_FILTER = [
 
 include_tiles = get_include_tiles_list()
 
-platform_name='Sentinel-2'
-processing_level='Level-1C'
-tile_filter=DEFAULT_TILE_FILTER
-rows_per_query=100
+platform_name = 'Sentinel-2'
+processing_level = 'Level-1C'
+tile_filter = DEFAULT_TILE_FILTER
+rows_per_query = 100
 
 
 def compile_tile_filter(args):
@@ -69,6 +69,7 @@ def compile_tile_filter(args):
 
     return filter
 
+
 def get_checksum(product_url):
     """
         Fetch checksum for the product with this id.
@@ -77,42 +78,46 @@ def get_checksum(product_url):
 
     return r['d']['Checksum']['Value']
 
+
 def get_download_link(product_url):
     """
         Get a link to download this product.
     """
     return f'{product_url}$value'
 
+
 def fetch_links(fetch_day):
     '''
         Fetch links for the given day
     '''
-    global status,granule_count,granule,db
-    
+    global status, granule_count, granule, db
+
     lock.acquire()
     db.connect()
     try:
-        fetch_day_available_links = granule_count.get(granule_count.date == fetch_day).available_links
-        fetch_day_fetched_links = granule_count.get(granule_count.date == fetch_day).fetched_links
+        fetch_day_available_links = granule_count.get(
+            granule_count.date == fetch_day).available_links
+        fetch_day_fetched_links = granule_count.get(
+            granule_count.date == fetch_day).fetched_links
     except:
-        granule_count.create(date=fetch_day, available_links=0, fetched_links=0, last_fetched_time =datetime.now() )
+        granule_count.create(date=fetch_day, available_links=0,
+                             fetched_links=0, last_fetched_time=datetime.now())
         fetch_day_available_links = 0
         fetch_day_fetched_links = 0
     db.close()
     lock.release()
 
-    start_date = str(fetch_day) + 'T00:00:00Z'  #open search API format
-    end_date = str(fetch_day) + 'T23:59:59Z' #open search API format
+    start_date = str(fetch_day) + 'T00:00:00Z'  # open search API format
+    end_date = str(fetch_day) + 'T23:59:59Z'  # open search API format
 
     # Build the query for Sentinel-2 datasets for given time period.
     query = f'(platformname:{platform_name}) AND ' \
             f'(processinglevel:{processing_level}) AND ' \
-            f'(beginposition:[{start_date} TO {end_date}]) ' 
-    
+            f'(beginposition:[{start_date} TO {end_date}]) '
 
-    #if tile_filter is not None:
+    # if tile_filter is not None:
     #    query = f'{query} AND {compile_tile_filter(tile_filter)}'
- 
+
     start = fetch_day_fetched_links
     total_fetched_entries = fetch_day_fetched_links
 
@@ -127,26 +132,25 @@ def fetch_links(fetch_day):
     # Continuously call the search API until all entries have been fetched.
     while True:
 
-        log(f'fetching {SEARCH_URL} with params {json_dump(params)}','links')
-        
+        log(f'fetching {SEARCH_URL} with params {json_dump(params)}', 'links')
+
         response = get(SEARCH_URL, params, auth=AUTH)
 
-        log(f'fetched {SEARCH_URL} with status {response.status_code}','links')
+        log(f'fetched {SEARCH_URL} with status {response.status_code}', 'links')
 
         if response.status_code == 200:
             feed = response.json()['feed']
 
             if 'opensearch:totalResults' not in feed or 'entry' not in feed:
-                # Can happen when there's no result.
-                if(DEBUG):
-                    print(f'{str(datetime.now())}, all links fetched for {fetch_day}')
-                log(f'all links fetched for {fetch_day}','links')
+                # Can happen when there's no result or all links are fetched
+                log(f'all links fetched for {fetch_day}', 'status')
+                log(f'all links fetched for {fetch_day}', 'links')
                 return
 
             total_results = int(feed['opensearch:totalResults'])
 
             if (fetch_day_available_links == total_results) and (fetch_day_fetched_links == total_results):
-                ee.emit('links_fetched',fetch_day)
+                # ee.emit('links_fetched',fetch_day)
                 break
 
             entries = feed['entry']
@@ -154,7 +158,8 @@ def fetch_links(fetch_day):
 
             lock.acquire()
             db.connect()
-            granule_counter = granule_count.get(granule_count.date == fetch_day)
+            granule_counter = granule_count.get(
+                granule_count.date == fetch_day)
             granule_counter.available_links = total_results
             granule_counter.save()
             db.close()
@@ -167,27 +172,26 @@ def fetch_links(fetch_day):
                     if d['name'] == "beginposition":
                         beginposition = convert_date(d['content'])
                     elif d['name'] == "endposition":
-                        endposition =  convert_date(d['content'])
+                        endposition = convert_date(d['content'])
                     elif d['name'] == "ingestiondate":
-                        ingestiondate = convert_date(d['content'])    
-                            
+                        ingestiondate = convert_date(d['content'])
+
                 for s in entry['str']:
                     if s['name'] == "uuid":
                         uuid = s['content']
                     elif s['name'] == "size":
-                        size =  parse_size(s['content'])
+                        size = parse_size(s['content'])
                     elif s['name'] == "filename":
                         filename = s['content']
-                    elif s['name']== "tileid":
+                    elif s['name'] == "tileid":
                         tileid = s['content']
 
-                
-                log(f'getting checksum for {id}','links')
+                #log(f'getting checksum for {id}','links')
                 checksum = get_checksum(PRODUCT_URL.format(id))
-                log(f'got checksum {checksum} for {id}','links')
+                #log(f'got checksum {checksum} for {id}','links')
 
                 download_url = get_download_link(PRODUCT_URL.format(id))
-                
+
                 if(tileid in include_tiles):
                     ignore_file = False
                 else:
@@ -196,45 +200,42 @@ def fetch_links(fetch_day):
                 lock.acquire()
                 db.connect()
 
-                #check and add only a new link in the database
+                # check and add only a new link in the database
                 try:
-                    granule_exists = granule.create(id=id, filename=filename,tileid=tileid,size=size,checksum=checksum,beginposition=beginposition,endposition=endposition,ingestiondate=ingestiondate,download_url=download_url,downloaded=False,in_progress=False,uploaded=False,ignore_file=ignore_file,retry=0)
+                    granule_exists = granule.create(id=id, filename=filename, tileid=tileid, size=size, checksum=checksum, beginposition=beginposition, endposition=endposition,
+                                                    ingestiondate=ingestiondate, download_url=download_url, downloaded=False, in_progress=False, uploaded=False, ignore_file=ignore_file, retry=0)
                 except Exception as e:
-                    log(f'skipping {id} as it already exists in database','links')
+                    log(f'skipping {id} as it already exists in database', 'links')
 
                 db.close()
                 lock.release()
 
-              
             total_fetched_entries += fetched_entries
             params['start'] += fetched_entries
-            
+
             lock.acquire()
             db.connect()
-            last_linked_fetched_time = status.get(status.key_name == 'last_linked_fetched_time')
+            last_linked_fetched_time = status.get(
+                status.key_name == 'last_linked_fetched_time')
             last_linked_fetched_time.value = str(datetime.now())
             last_linked_fetched_time.save()
             db.close()
             lock.release()
-            
+
             lock.acquire()
             db.connect()
             try:
-                granule_counter = granule_count.get(granule_count.date == fetch_day)
+                granule_counter = granule_count.get(
+                    granule_count.date == fetch_day)
                 granule_counter.fetched_links = total_fetched_entries
                 granule_counter.last_fetched_time = datetime.now()
-                granule_counter.save()            
-                if(DEBUG):
-                    print(f'{str(datetime.now())}, {total_fetched_entries} links fetched for {fetch_day}')
-                log(f'{total_fetched_entries} links fetched for {fetch_day}','links')
+                granule_counter.save()
+                log(f'{total_fetched_entries} links fetched for {fetch_day}', 'links')
             except Exception as e:
-                if(DEBUG):
-                    print(f'error: {str(e)}, {filename}')
-                log(f'error: {str(e)}, {filename}','error')
+                log(f'error: {str(e)}, {filename}', 'error')
 
             db.close()
             lock.release()
 
             if (total_fetched_entries >= total_results):
                 break
-            
