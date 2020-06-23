@@ -1,7 +1,7 @@
 # HLS Sentinel-2 Downloader (WIP/TODO)
 
 This is a Python project to download Sentinel-2 files from ESA International Hub. 
-It uses aria2c (https://aria2.github.io/) download utility to handle actual downloads
+It uses aria2c (https://aria2.github.io/) download utility to handle actual concurrent downloads
 
 # Manual Installation Instructions
 
@@ -84,8 +84,8 @@ aria2c --max-concurrent-downloads=15 --split=1 --http-user=<username> --http-pas
 
 # Available Logs
 
-Following logs are correct
-* status logs: such as download is starting 
+Following logs are collected
+* status logs: such as download is starting, file is downloaded, etc
 * downloads logs: time of download, filename, size
 * error logs: when file download or upload is failed, or any other error messages
 * metrics logs: current available CPU/memory, number of active downloads and threads

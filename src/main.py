@@ -2,9 +2,6 @@
 from time import sleep
 from multiprocessing import Process
 from os import path, listdir
-from models import status,  granule, db
-from log_manager import log
-from settings import DEBUG
 from datetime import datetime, date, timedelta
 from ntpath import basename
 from sys import exit
@@ -14,13 +11,14 @@ from schedule import every, run_pending
 from re import search
 
 # import custom functions
+from models import status,  granule, db
 from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
 from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size
 from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
-from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT
+from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, DOWNLOAD_BY_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS
 from thread_manager import lock, download_queue, upload_queue, Thread, active_count
 
 
@@ -73,8 +71,8 @@ def start_links_fetch():
 
     try:
 
-        # continue fetching links for the last 14 days
-        while fetch_day >= date.today() + timedelta(days=-14):
+        # continue fetching links for the last 21 days
+        while fetch_day >= date.today() + timedelta(days=-21):
             fetch_day = fetch_day + timedelta(days=-1)
             fetch_links_worker = Thread(
                 name="fetch_links_worker", target=fetch_links, args=(fetch_day,))
@@ -215,6 +213,25 @@ def requeue_retry_failed(DOWNLOAD_DAY=None):
         return False
 
 
+def expire_links():
+    '''
+        expire links older than 21 days (today + last 20 days)
+    '''
+    last_day = date.today() + timedelta(days=-20)
+
+    lock.acquire()
+    db.connect()
+
+    # mark links as expired
+    granule.update(expired=True).where(
+        granule.beginposition < last_day).execute()
+
+    log(f"expiring links older than 21 days", "status")
+
+    db.close()
+    lock.release()
+
+
 def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
@@ -228,15 +245,17 @@ def download_file():
         .where(granule.in_progress == False)
         .where(granule.uploaded == False)
         .where(granule.download_failed == False)
+        .where(granule.expired == False)
     )
 
-    if not DOWNLOAD_DAY is None:
+    if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
         start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
         end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
         query = query.where(
             granule.beginposition.between(start_date, end_date))
 
-    query = query.order_by(granule.beginposition.desc())
+    # download oldest available first
+    query = query.order_by(granule.beginposition.asc())
 
     lock.acquire()
     db.connect()
@@ -246,23 +265,25 @@ def download_file():
         granule_to_download = query.get()
         granule_to_download_count = query.count()
 
-        if not DOWNLOAD_DAY == None:
-            log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
+        if DOWNLOAD_BY_DAY:
+            if not DOWNLOAD_DAY == None:
+                log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
+            else:
+                # when all the files for given day are downloaded, set download day to oldest available day
+                # TODO: add logic to not download files older than 21 days
+                granule_to_download_time = granule_to_download.beginposition.strftime(
+                    "%Y-%m-%d")
+                DOWNLOAD_DAY = granule_to_download_time
+                log(
+                    f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
+                db.close()
+                lock.release()
+                return
         else:
-            # when all the files for given day are downloaded, set download day to latest available day
-            # TODO: add logic to not download files older than 14 days
-            DOWNLOAD_DAY = granule_to_download.beginposition.strftime(
-                "%Y-%m-%d")
-            log(
-                f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
-            db.close()
-            lock.release()
-            return
+            log(f'{granule_to_download_count} left to download', "status")
 
     except Exception as e:
-        log(
-            f"No file to download found (DOWNLOAD_DAY={DOWNLOAD_DAY})", "status")
-
+        log(f"No file to download found", "status")
         db.close()
         lock.release()
 
@@ -361,7 +382,7 @@ def upload_orphan_downloads():
 
 def do_downloads():
     '''
-        if there are less than 14 downloads in progress, add one more to aria2 queue
+        if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
     global download_file_worker
 
@@ -369,7 +390,7 @@ def do_downloads():
     log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
-    if (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
+    if USE_SCIHUB_TO_FETCH_LINKS or (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT
     else:
         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
@@ -465,7 +486,11 @@ def init():
         Initilize the link fetching and start the scheduler
     '''
 
+    # remove orphan files in downloads folder
     clean_up_downloads()
+
+    # expire links older than 21 days
+    expire_links()
 
     # start the link fetcher
     check_link_fetcher()
@@ -474,7 +499,7 @@ def init():
     kill_downloader()
 
     # requeue all the failed download by resetting flags in the database, either for a given day or for all days
-    if not DOWNLOAD_DAY is None:
+    if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
         requeue_retry_failed(DOWNLOAD_DAY)
     else:
         requeue_retry_failed()
@@ -484,6 +509,7 @@ def init():
     every(1).minutes.do(run_threaded, collect_metrics)
     every(5).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
+    every(24).hours.do(expire_links)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
 

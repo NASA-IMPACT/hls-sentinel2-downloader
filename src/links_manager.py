@@ -9,12 +9,8 @@ from thread_manager import lock
 from models import status, granule_count, granule, db
 from utils import parse_size, convert_date, get_include_tiles_list
 from log_manager import log
-from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DEBUG
+from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, SCIHUB_USERNAME, SCIHUB_PASSWORD, USE_SCIHUB_TO_FETCH_LINKS, DEBUG
 
-AUTH = HTTPBasicAuth(
-    COPERNICUS_USERNAME,
-    COPERNICUS_PASSWORD
-)
 
 '''
 Product and Search URLs and API are constructed as per
@@ -23,9 +19,23 @@ https://inthub.copernicus.eu/userguide/OpenSearchAPI
 https://inthub.copernicus.eu/twiki/do/view/SciHubUserGuide/FullTextSearch?redirectedfrom=SciHubUserGuide.3FullTextSearch
 
 '''
+if USE_SCIHUB_TO_FETCH_LINKS:
+    AUTH = HTTPBasicAuth(
+        SCIHUB_USERNAME,
+        SCIHUB_PASSWORD
+    )
 
-PRODUCT_URL = "https://inthub2.copernicus.eu/dhus/odata/v1/Products('{}')/"
-SEARCH_URL = 'https://inthub2.copernicus.eu/dhus/search'
+    PRODUCT_URL = "https://scihub.copernicus.eu/dhus/odata/v1/Products('{}')/"
+    SEARCH_URL = 'https://scihub.copernicus.eu/dhus/search'
+else:
+    AUTH = HTTPBasicAuth(
+        COPERNICUS_USERNAME,
+        COPERNICUS_PASSWORD
+    )
+
+    PRODUCT_URL = "https://inthub2.copernicus.eu/dhus/odata/v1/Products('{}')/"
+    SEARCH_URL = 'https://inthub2.copernicus.eu/dhus/search'
+
 
 # Filter to exclude tiles over Antartica
 DEFAULT_TILE_FILTER = [
@@ -191,6 +201,9 @@ def fetch_links(fetch_day):
                 #log(f'got checksum {checksum} for {id}','links')
 
                 download_url = get_download_link(PRODUCT_URL.format(id))
+
+                if USE_SCIHUB_TO_FETCH_LINKS:
+                    download_url = download_url.replace('scihub', 'inthub2')
 
                 if(tileid in include_tiles):
                     ignore_file = False

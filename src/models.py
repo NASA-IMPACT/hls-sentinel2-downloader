@@ -50,6 +50,7 @@ class granule(BaseModel):
     download_started = DateTimeField(null=True)
     download_finished = DateTimeField(null=True)
     download_failed = DateTimeField(default=False)
+    expired = BooleanField(default=False)
     retry = IntegerField(default=0)
 
 

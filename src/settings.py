@@ -15,8 +15,13 @@ FETCH_LINKS = parser.getboolean('aws', 'fetch_links')
 DOWNLOAD_DAY = parser.get('aws', 'download_day')
 if DOWNLOAD_DAY.strip() == '' or DOWNLOAD_DAY.strip().lower() == 'none':
     DOWNLOAD_DAY = None
+DOWNLOAD_BY_DAY = parser.getboolean('aws', 'download_by_day')
 COPERNICUS_USERNAME = parser.get('aws', 'copernicus_username')
 COPERNICUS_PASSWORD = parser.get('aws', 'copernicus_password')
+SCIHUB_USERNAME = parser.get('aws', 'scihub_username')
+SCIHUB_PASSWORD = parser.get('aws', 'scihub_password')
+USE_SCIHUB_TO_FETCH_LINKS = parser.getboolean(
+    'aws', 'use_scihub_to_fetch_links')
 LOCK_FILE = parser.get('aws', 'lock_file')
 INCLUDE_TILES_FILE = parser.get('aws', 'include_tiles_file')
 DOWNLOADS_PATH = parser.get('aws', 'downloads_path')
