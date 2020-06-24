@@ -512,6 +512,7 @@ def init():
     every(24).hours.do(expire_links)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
+    every(30).minutes.do(requeue_retry_failed)
 
     # start the scheduler
     while True:
