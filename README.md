@@ -4,14 +4,14 @@ This is a Python project to download Sentinel-2 files from ESA International Hub
 It uses aria2c (https://aria2.github.io/) download utility to handle actual concurrent downloads
 
 
-# Architecture Diagram
+## Architecture Diagram
 ![Architecture](/images/downloader_architecture.png)
 
-# Database Schema
+## Database Schema
 ![DatabaseSchema](/images/database_schema.png)
 
 
-# Database Queries
+## Database Queries
 
 * Compare total size of files to download vs uploaded per day
 ```sql
@@ -84,7 +84,7 @@ select count(*) from granule where CAST(beginposition AS DATE) = '2020-05-30' AN
 select count(*),CAST(beginposition as DATE) as start_date from granule where expired=true group by CAST(beginposition as DATE);
 ```
 
-# Manual Installation Instructions
+## Manual Installation Instructions
 
 * Create a EC2 instance with atleast 32GB memory, 8 CPUs, 1 TB SSD
 * Assign correct role to EC2 instance to write to S3 
@@ -104,7 +104,7 @@ select count(*),CAST(beginposition as DATE) as start_date from granule where exp
 * Now run ./start.sh to start the downloader and ./stop.sh to stop the downloader
 
 
-# Manual download test
+## Manual download test
 
 It is possible to manually run the download of the files for testing using aria2c as below. Note set the valid values for username, password, downloads dir, and input urls text file
 
@@ -112,7 +112,7 @@ It is possible to manually run the download of the files for testing using aria2
 aria2c --max-concurrent-downloads=15 --split=1 --http-user=<username> --http-passwd=<password>  --dir=<downloads_dir> --allow-overwrite=true --input-file=<urls.txt> 
 ```
 
-# Available Logs
+## Available Logs
 
 Following logs are collected and uploaded to S3
 * status logs: such as download is starting, file is downloaded, etc
@@ -121,7 +121,7 @@ Following logs are collected and uploaded to S3
 * metrics logs: current available CPU/memory, number of active downloads and threads
 
 
-# Future Tasks
+## Future Tasks
 
 * Investigate database performance tweaks
 * Automate deployment
