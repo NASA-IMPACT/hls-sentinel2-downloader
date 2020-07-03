@@ -5,7 +5,7 @@ It uses aria2c (https://aria2.github.io/) download utility to handle actual conc
 
 
 # Architecture Diagram
-![Architecture](/downloader_architeccture.png)
+![Architecture](/downloader-architecture.png)
 
 # Manual Installation Instructions
 
