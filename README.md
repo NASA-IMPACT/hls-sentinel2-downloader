@@ -1,4 +1,4 @@
-# HLS Sentinel-2 Downloader (WIP/TODO)
+# HLS Sentinel-2 Downloader (WIP)
 
 This is a Python project to download Sentinel-2 files from ESA International Hub. 
 It uses aria2c (https://aria2.github.io/) download utility to handle actual concurrent downloads
@@ -114,7 +114,7 @@ aria2c --max-concurrent-downloads=15 --split=1 --http-user=<username> --http-pas
 
 # Available Logs
 
-Following logs are collected
+Following logs are collected and uploaded to S3
 * status logs: such as download is starting, file is downloaded, etc
 * downloads logs: time of download, filename, size
 * error logs: when file download or upload is failed, or any other error messages
@@ -123,8 +123,8 @@ Following logs are collected
 
 # Future Tasks
 
-* Add correct indexes http://docs.peewee-orm.com/en/latest/peewee/models.html#indexes-and-constraints
+* Investigate database performance tweaks
 * Automate deployment
-* Add tests and refactor code to allow chaos engineering on the system
-* Add debugging instructions
-* Add screenshots to the readme
+* Add tests
+* Do the chaos engineering on the program
+* Add debugging instructions for new developers
