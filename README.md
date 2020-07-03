@@ -13,21 +13,21 @@ It uses aria2c (https://aria2.github.io/) download utility to handle actual conc
 
 # Database Queries
 
-Compare total size of files to download vs uploaded per day
+* Compare total size of files to download vs uploaded per day
 ```sql
 select T1.AvailableGB,T2.UploadedGB,T1.date from (select sum(size)/(1024*1024*1024) as "AvailableGB", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select sum(size)/(1024*1024*1024) as "UploadedGB", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
 where T1.date = T2.date;
 ```
 ![AvailableDownloadedSize](/images/available_vs_downloaded_size.png)
 
-Compare total number of files to download vs uploaded per day
+* Compare total number of files to download vs uploaded per day
 ```sql
 select T1.Available,T2.Uploaded,T1.date from (select count(*) as "Available", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select count(*) as "Uploaded", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
 where T1.date = T2.date;
 ```
 ![AvailableDownloadedCount](/images/available_vs_downloaded_count.png)
 
-Get count and total size downloaded in last 10 minutes
+* Get count and total size downloaded in last 10 minutes
 ```sql
 select count(*) from granule where uploaded=True AND download_finished >= CONVERT_TZ( date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' )
 
@@ -36,48 +36,50 @@ select sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule 
 select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' ) group by CAST(beginposition AS DATE)
 
 ```
+![DownloadedInLast10Min](/images/downloaded_in_last_10min.png)
 
-Get all the available links count per day in the database
+* Get all the available links count per day in the database
 ```sql
 select * from granule_count
 ```
 ![AvailableLinks](/images/available_links.png)
 
-Get 50 latest links form the database
+* Get 50 latest links form the database
 ```sql
 select * from granule order by beginposition desc limit 50
 ```
 
-Check when the last time file was download or uploaded
+* Check when the last time file was download or uploaded
 ```sql
 select * from status
 ```
 
-Get the in progress downloads 
+* Get the in progress downloads 
 ```sql
 select * from granule where in_progress = True
 ```
 
-Get the total failed downloads 
+* Get the total failed downloads 
 ```sql
 select * from granule where download_failed = True
 ```
 
-Count the files to download for a day
+* Count the files to download for a day
 ```sql
 select count(*) from granule where CAST(beginposition AS DATE) = '2020-05-30' AND ignore_file = False;
 ```
-Count the files that are uploaded
+
+* Count the files that are uploaded
 ```sql
 select count(*) from granule where CAST(beginposition AS DATE) = '2020-05-30' AND uploaded = True AND ignore_file = False;
 ```
 
-Get the failed downloads for a day
+* Get the failed downloads for a day
 ```sql
 select count(*) from granule where CAST(beginposition AS DATE) = '2020-05-30' AND download_failed = True
 ```
 
-Count expired links by date
+* Count expired links by date
 ```sql
 select count(*),CAST(beginposition as DATE) as start_date from granule where expired=true group by CAST(beginposition as DATE);
 ```
