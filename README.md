@@ -5,29 +5,27 @@ It uses aria2c (https://aria2.github.io/) download utility to handle actual conc
 
 
 # Architecture Diagram
-![Architecture](/downloader-architecture.png)
+![Architecture](/images/downloader_architecture.png)
 
-# Manual Installation Instructions
-
-* Create a EC2 instance with atleast 32GB memory, 8 CPUs, 1 TB SSD
-* Assign correct role to EC2 instance to write to S3 
-* Create a MySQL database instance with atleast 8GB memory
-* Put these EC2 and MySQL instances into its own VPC
-* Add firewall rules to allows traffic from internet and your own laptop/desktop machine
-* Create S3 buckets to store downloads and logs
-* Copy the repository code inside EC2 instance
-* Run install.sh inside EC2 instance
-* Install python depedencies 
-     sudo pip3 install -r requirements.txt 
-* Create folder inside EC2 instance to temporarily store downloads and log files
-* Copy settings_sample.ini to settings.ini and enter correct values
-* Add execute permission on start.sh and stop.sh
-     chmod +x start.sh
-     chmod +x stop.sh
-* Now run ./start.sh
+# Database Schema
+![DatabaseSchema](/images/database_schema.png)
 
 
 # Database Queries
+
+Compare total size of files to download vs uploaded per day
+```sql
+select T1.AvailableGB,T2.UploadedGB,T1.date from (select sum(size)/(1024*1024*1024) as "AvailableGB", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select sum(size)/(1024*1024*1024) as "UploadedGB", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
+where T1.date = T2.date;
+```
+![AvailableDownloadedSize](/images/available_vs_downloaded_size.png)
+
+Compare total number of files to download vs uploaded per day
+```sql
+select T1.Available,T2.Uploaded,T1.date from (select count(*) as "Available", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select count(*) as "Uploaded", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
+where T1.date = T2.date;
+```
+![AvailableDownloadedCount](/images/available_vs_downloaded_count.png)
 
 Get count and total size downloaded in last 10 minutes
 ```sql
@@ -39,6 +37,12 @@ select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) A
 
 ```
 
+Get all the available links count per day in the database
+```sql
+select * from granule_count
+```
+![AvailableLinks](/images/available_links.png)
+
 Get 50 latest links form the database
 ```sql
 select * from granule order by beginposition desc limit 50
@@ -47,11 +51,6 @@ select * from granule order by beginposition desc limit 50
 Check when the last time file was download or uploaded
 ```sql
 select * from status
-```
-
-Get all the available links count per day in the database
-```sql
-select * from granule_count
 ```
 
 Get the in progress downloads 
@@ -78,9 +77,34 @@ Get the failed downloads for a day
 select count(*) from granule where CAST(beginposition AS DATE) = '2020-05-30' AND download_failed = True
 ```
 
+Count expired links by date
+```sql
+select count(*),CAST(beginposition as DATE) as start_date from granule where expired=true group by CAST(beginposition as DATE);
+```
+
+# Manual Installation Instructions
+
+* Create a EC2 instance with atleast 32GB memory, 8 CPUs, 1 TB SSD
+* Assign correct role to EC2 instance to write to S3 
+* Create a MySQL database instance with atleast 8GB memory
+* Put these EC2 and MySQL instances into its own VPC
+* Add firewall rules to allows traffic from internet and your own laptop/desktop machine
+* Create S3 buckets to store downloads and logs
+* Copy the repository code inside EC2 instance
+* Run install.sh inside EC2 instance which will install required system packages as well as aria2c (https://aria2.github.io/manual/en/html/README.html) which is used to download files from Sentinel International Access Hub(https://inthub.copernicus.eu/)
+* Install python depedencies 
+     sudo pip3 install -r requirements.txt 
+* Create folder inside EC2 instance to temporarily store downloads and log files
+* Copy settings_sample.ini to settings.ini and enter correct values
+* Add execute permission on start.sh and stop.sh
+     chmod +x start.sh
+     chmod +x stop.sh
+* Now run ./start.sh to start the downloader and ./stop.sh to stop the downloader
+
+
 # Manual download test
 
-It is possible to manually run the download of the files for testing using aria2 as below. Note set the valid values for username, password, downloads dir, and input urls text file
+It is possible to manually run the download of the files for testing using aria2c as below. Note set the valid values for username, password, downloads dir, and input urls text file
 
 ```
 aria2c --max-concurrent-downloads=15 --split=1 --http-user=<username> --http-passwd=<password>  --dir=<downloads_dir> --allow-overwrite=true --input-file=<urls.txt> 
