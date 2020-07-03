@@ -3,6 +3,10 @@
 This is a Python project to download Sentinel-2 files from ESA International Hub. 
 It uses aria2c (https://aria2.github.io/) download utility to handle actual concurrent downloads
 
+
+# Architecture Diagram
+![Architecture](/downloader-architeccture.png)
+
 # Manual Installation Instructions
 
 * Create a EC2 instance with atleast 32GB memory, 8 CPUs, 1 TB SSD

@@ -147,7 +147,7 @@ def upload_file(file_path):
         remove_file(file_path)
 
 
-def requeue_retry_failed(DOWNLOAD_DAY=None):
+def requeue_failed(DOWNLOAD_DAY=None):
     '''
         requeue the failed downloads by resetting flags in the database
     '''
@@ -287,7 +287,7 @@ def download_file():
         db.close()
         lock.release()
 
-        if requeue_retry_failed(DOWNLOAD_DAY) == False:
+        if requeue_failed(DOWNLOAD_DAY) == False:
             DOWNLOAD_DAY = None  # no files found for current day so resume downloading rest of the days
 
         return
@@ -500,9 +500,9 @@ def init():
 
     # requeue all the failed download by resetting flags in the database, either for a given day or for all days
     if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
-        requeue_retry_failed(DOWNLOAD_DAY)
+        requeue_failed(DOWNLOAD_DAY)
     else:
-        requeue_retry_failed()
+        requeue_failed()
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
@@ -512,7 +512,7 @@ def init():
     every(24).hours.do(expire_links)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
-    every(30).minutes.do(requeue_retry_failed)
+    every(30).minutes.do(requeue_failed)
 
     # start the scheduler
     while True:
