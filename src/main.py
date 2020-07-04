@@ -511,7 +511,7 @@ def init():
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(15).seconds.do(do_downloads)
+    every(2).seconds.do(do_downloads)
     every(30).minutes.do(requeue_failed)
 
     # start the scheduler
