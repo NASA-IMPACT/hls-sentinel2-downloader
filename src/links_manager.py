@@ -100,6 +100,8 @@ def fetch_links(fetch_day):
     '''
         Fetch links for the given day
     '''
+    log(f'started fetching links for {fetch_day}', 'status')
+
     global status, granule_count, granule, db
 
     lock.acquire()
@@ -123,7 +125,7 @@ def fetch_links(fetch_day):
     # Build the query for Sentinel-2 datasets for given time period.
     query = f'(platformname:{platform_name}) AND ' \
             f'(processinglevel:{processing_level}) AND ' \
-            f'(beginposition:[{start_date} TO {end_date}]) '
+            f'(ingestiondate:[{start_date} TO {end_date}]) '  # alternative is beginposition
 
     # if tile_filter is not None:
     #    query = f'{query} AND {compile_tile_filter(tile_filter)}'
@@ -135,7 +137,7 @@ def fetch_links(fetch_day):
         'q': query,
         'rows': rows_per_query,
         'format': 'json',
-        'orderby': 'beginposition desc',
+        'orderby': 'ingestiondate desc',  # alternative is beginposition
         'start': start
     }
 
@@ -175,53 +177,58 @@ def fetch_links(fetch_day):
             db.close()
             lock.release()
 
-            for entry in entries:
-                id = entry['id']
+            try:
+                for entry in entries:
+                    id = entry['id']
 
-                for d in entry['date']:
-                    if d['name'] == "beginposition":
-                        beginposition = convert_date(d['content'])
-                    elif d['name'] == "endposition":
-                        endposition = convert_date(d['content'])
-                    elif d['name'] == "ingestiondate":
-                        ingestiondate = convert_date(d['content'])
+                    for d in entry['date']:
+                        if d['name'] == "beginposition":
+                            beginposition = convert_date(d['content'])
+                        elif d['name'] == "endposition":
+                            endposition = convert_date(d['content'])
+                        elif d['name'] == "ingestiondate":
+                            ingestiondate = convert_date(d['content'])
 
-                for s in entry['str']:
-                    if s['name'] == "uuid":
-                        uuid = s['content']
-                    elif s['name'] == "size":
-                        size = parse_size(s['content'])
-                    elif s['name'] == "filename":
-                        filename = s['content']
-                    elif s['name'] == "tileid":
-                        tileid = s['content']
+                    for s in entry['str']:
+                        if s['name'] == "uuid":
+                            uuid = s['content']
+                        elif s['name'] == "size":
+                            size = parse_size(s['content'])
+                        elif s['name'] == "filename":
+                            filename = s['content']
+                        elif s['name'] == "tileid":
+                            tileid = s['content']
 
-                #log(f'getting checksum for {id}','links')
-                checksum = get_checksum(PRODUCT_URL.format(id))
-                #log(f'got checksum {checksum} for {id}','links')
+                    #log(f'getting checksum for {id}','links')
+                    checksum = get_checksum(PRODUCT_URL.format(id))
+                    #log(f'got checksum {checksum} for {id}','links')
 
-                download_url = get_download_link(PRODUCT_URL.format(id))
+                    download_url = get_download_link(PRODUCT_URL.format(id))
 
-                if USE_SCIHUB_TO_FETCH_LINKS:
-                    download_url = download_url.replace('scihub', 'inthub2')
+                    if USE_SCIHUB_TO_FETCH_LINKS:
+                        download_url = download_url.replace(
+                            'scihub', 'inthub2')
 
-                if(tileid in include_tiles):
-                    ignore_file = False
-                else:
-                    ignore_file = True
+                    if(tileid in include_tiles):
+                        ignore_file = False
+                    else:
+                        ignore_file = True
 
-                lock.acquire()
-                db.connect()
+                    lock.acquire()
+                    db.connect()
 
-                # check and add only a new link in the database
-                try:
-                    granule_exists = granule.create(id=id, filename=filename, tileid=tileid, size=size, checksum=checksum, beginposition=beginposition, endposition=endposition,
-                                                    ingestiondate=ingestiondate, download_url=download_url, downloaded=False, in_progress=False, uploaded=False, ignore_file=ignore_file, retry=0)
-                except Exception as e:
-                    log(f'skipping {id} as it already exists in database', 'links')
+                    # check and add only a new link in the database
+                    try:
+                        granule_exists = granule.create(id=id, filename=filename, tileid=tileid, size=size, checksum=checksum, beginposition=beginposition, endposition=endposition,
+                                                        ingestiondate=ingestiondate, download_url=download_url, downloaded=False, in_progress=False, uploaded=False, ignore_file=ignore_file, retry=0)
+                    except Exception as e:
+                        log(f'skipping {id} as it already exists in database', 'links')
 
-                db.close()
-                lock.release()
+                    db.close()
+                    lock.release()
+
+            except TypeError as e:
+                log(f'Type error for entry object {str(entry)}', 'error')
 
             total_fetched_entries += fetched_entries
             params['start'] += fetched_entries

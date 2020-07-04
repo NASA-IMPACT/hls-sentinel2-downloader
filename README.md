@@ -44,6 +44,13 @@ select * from granule_count
 ```
 ![AvailableLinks](/images/available_links.png)
 
+
+* Find max, min, avg download time of files downloaded in last 10 days
+```sql
+select  max(TIME_TO_SEC(TIMEDIFF(download_finished,download_started)))/60 as "Max Download Time (minutes)", min(TIME_TO_SEC(TIMEDIFF(download_finished,download_started)))/60 as "Min Download Time (minutes)", avg(TIME_TO_SEC(TIMEDIFF(download_finished,download_started)))/60 as "Avg Download Time (minutes)"  from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 10 day), 'UTC', 'America/Chicago' );
+ ```
+![MaxMinAvgDownloadTime](/images/max_min_avg_download_time.png)
+
 * Get 50 latest links form the database
 ```sql
 select * from granule order by beginposition desc limit 50
