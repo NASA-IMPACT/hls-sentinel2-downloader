@@ -2,8 +2,8 @@
 from datetime import datetime
 from hashlib import md5
 from glob import glob
-from os import remove, path, getcwd, getpid
-from psutil import process_iter, virtual_memory, Process
+from os import remove, path, getcwd, getpid, listdir
+from psutil import process_iter, virtual_memory, Process, NoSuchProcess
 from dateparser import parse as dateparser_parse
 from re import match, sub
 from fcntl import lockf, LOCK_EX, LOCK_NB
@@ -103,17 +103,6 @@ def update_ignore_links_in_datebase():
     lock.release()
 
 
-def kill_downloader():
-    '''
-        kill existing running aria2 process
-    '''
-    for proc in process_iter():
-        # print(proc.name().lower())
-        if proc.name().lower() == 'aria2c':
-            proc.kill()
-            log(f"existing aria2c process killed", "status")
-
-
 def remove_file(file_path):
     '''
         remove a file
@@ -170,3 +159,37 @@ def get_folder_size(p):
         log(f'error during getting folder size {str(e)}', 'error')
 
     return size
+
+def get_zip_count():
+    '''
+        get number of active downloads in the downloads folder
+    '''
+    zip_count = 0
+    for item in listdir(DOWNLOADS_PATH):
+        if item.endswith(".zip"):
+            zip_count = zip_count + 1
+    
+    return zip_count
+
+def get_wget_count():
+    '''
+        get number of active wget processes count
+    '''
+    wget_count = 0
+    for proc in process_iter():
+        try:
+            if proc.name().lower() == 'wget':
+                wget_count = wget_count + 1
+        except NoSuchProcess:
+            pass
+    
+    return wget_count
+
+def kill_wget():
+    '''
+        kill existing running wget processes if any
+    '''
+    for proc in process_iter():
+        if proc.name().lower() == 'wget':
+            proc.kill()
+            log(f"existing wget process killed", "status")

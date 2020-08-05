@@ -9,16 +9,18 @@ from colorama import init as colorama_init, Fore, Back, Style
 from termcolor import colored
 from schedule import every, run_pending
 from re import search
+from subprocess import run
+from hashlib import md5
+
 
 # import custom functions
 from models import status,  granule, db
-from download_manager import add_download_url, get_active_urls
 from s3_uploader import s3_upload_file, s3_file_exists
-from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size
+from utils import get_checksum_local, kill_wget, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size, get_wget_count
 from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
-from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, DOWNLOAD_BY_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS
+from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, DOWNLOAD_BY_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS, COPERNICUS_USERNAME, COPERNICUS_PASSWORD, WGET_TIMEOUT, WGET_TRIES, WGET_WAITRETRY
 from thread_manager import lock, download_queue, upload_queue, Thread, active_count
 
 
@@ -27,7 +29,8 @@ colorama_init(autoreset=True)
 fetch_links_worker = None
 upload_orphan_downloads_worker = None
 download_file_worker = None
-
+active_urls = []
+open_connections = 0
 
 def check_downloads_folder_size():
     '''
@@ -236,7 +239,12 @@ def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
-    global DOWNLOAD_DAY  # should be in format Y-m-d
+    global active_urls
+    global open_connections
+
+    lock.acquire()
+    open_connections = open_connections + 1
+    lock.release()
 
     query = (
         granule.select()
@@ -326,9 +334,51 @@ def download_file():
         db.close()
         lock.release()
 
-        download = add_download_url(granule_to_download.download_url)
 
         log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}", "status",)
+
+        lock.acquire()
+        active_urls.append(granule_to_download.download_url)
+        lock.release()
+
+        # start wget to download of file  
+        p = run(['wget',
+                            '--no-check-certificate',
+                            '--content-disposition',
+                            '--no-http-keep-alive',
+                            '--continue',
+                            f'--user={COPERNICUS_USERNAME}',
+                            f'--password={COPERNICUS_PASSWORD}',
+                            f'--directory-prefix={DOWNLOADS_PATH}',
+                            f'--timeout={WGET_TIMEOUT}',
+                            f'--tries={WGET_TRIES}',
+                            f'--waitretry={WGET_WAITRETRY}',
+                            f'{granule_to_download.download_url}'],
+                            capture_output=True)
+
+        file_path = f'{DOWNLOADS_PATH}/{granule_to_download.filename}'
+        file_path = file_path.replace('SAFE','zip')
+
+        hash = ''
+        try:
+            hash = md5(open(file_path, 'rb').read()).hexdigest()
+        except Exception as e:
+            log(f"unable to do hash of {file_path}", "error")
+
+        if not hash.lower() == granule_to_download.checksum.lower():
+            log(f'Error: downloading {granule_to_download.filename} failed with wget return code {p.returncode}.\n {p.stderr}', "status")
+            download_queue.put({"url": granule_to_download.download_url, "success": False})
+        else:
+            download_queue.put({"file_path": file_path, "success": True})
+            log(f"download complete and hash verified for {file_path}", "status")
+
+
+
+        lock.acquire()
+        open_connections = open_connections - 1
+        active_urls.remove(granule_to_download.download_url)
+        lock.release()
+
 
     else:
         log(f"file already uploaded = {filename}", "status")
@@ -344,14 +394,12 @@ def download_file():
 
 def is_active_url(url):
     '''
-        check if already an active url in aria2's download queue
+        check if already an active url 
     '''
-    active_urls = get_active_urls()
-    for item in active_urls:
-        for file in item['files']:
-            for uri in file['uris']:
-                if uri['uri'].lower() == url.lower():
-                    return True
+    global active_urls
+    for active_url in active_urls:
+        if active_url.lower() == url.lower():
+            return True
 
     return False
 
@@ -384,9 +432,9 @@ def do_downloads():
     '''
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
-    global download_file_worker
+    global open_connections
 
-    log(f"#threads = {active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    log(f"#threads = {active_count()}, #downloads in progress = {get_wget_count()}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
     log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
@@ -395,12 +443,11 @@ def do_downloads():
     else:
         maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
-    if len(get_active_urls()) < maximum_downloads:
+    if open_connections < maximum_downloads:
         try:
-            if download_file_worker == None or download_file_worker.isAlive() == False:
-                download_file_worker = Thread(
-                    name="download_file_worker", target=download_file, args=())
-                download_file_worker.start()
+            wget_file_worker = Thread(
+                name="wget_file_worker", target=download_file, args=())
+            wget_file_worker.start()
         except Exception as e:
             log(f"error during initiaing downloads:{str(e)}", "status")
 
@@ -495,8 +542,8 @@ def init():
     # start the link fetcher
     check_link_fetcher()
 
-    # kill existing aria2 instance
-    kill_downloader()
+    # kill existing wget instance
+    kill_wget()
 
     # requeue all the failed download by resetting flags in the database, either for a given day or for all days
     if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
@@ -525,5 +572,5 @@ if file_is_locked():
     log(f'Can not start the downloader: another instance is running', 'error')
     exit(0)
 else:
-    log(f'Starting the downloader: no other instance is running found', 'status')
+    log(f'Starting the downloader: no other running instance found', 'status')
     init()

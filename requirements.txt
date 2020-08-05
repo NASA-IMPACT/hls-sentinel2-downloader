@@ -7,7 +7,6 @@ peewee
 requests
 pyee
 dateparser
-aria2p
 schedule
 colorama
 termcolor
