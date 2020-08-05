@@ -8,7 +8,6 @@ from psutil import virtual_memory, cpu_percent, cpu_count
 from models import granule, granule_count, status, db
 from utils import get_folder_size, get_wget_count
 from settings import LOGS_PATH, DOWNLOADS_PATH
-from download_manager import get_active_urls
 from log_manager import log
 from thread_manager import lock, active_count, upload_queue, download_queue
 
@@ -36,7 +35,7 @@ def collect_metrics():
         granule.downloaded == False).where(granule.ignore_file == False).count()
     metrics['total_granules_downloaded'] = granule.select().where(
         granule.downloaded == True).count()
-    metrics['total_downloads_in_progress'] = get_wget_count() #len(get_active_urls())
+    metrics['total_downloads_in_progress'] = get_wget_count()
     metrics['total_upload_queue_items'] = upload_queue.qsize()
     metrics['total_download_queue_items'] = download_queue.qsize()
     metrics['total_active_threads'] = active_count()
@@ -44,7 +43,6 @@ def collect_metrics():
     metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
     metrics['count_download_folder_files'] = len(
         glob1(DOWNLOADS_PATH, "*.zip"))
-    #metrics['count_download_folder_aria2_files'] = len(glob1(DOWNLOADS_PATH, "*.aria2"))
     metrics['total_memory'] = virtual_memory().total
     metrics['available_memory'] = virtual_memory().available
     metrics['used_memory'] = virtual_memory().used
