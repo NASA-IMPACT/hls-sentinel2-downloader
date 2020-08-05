@@ -1,7 +1,7 @@
 # HLS Sentinel-2 Downloader (WIP)
 
 This is a Python project to download Sentinel-2 files from ESA International Hub. 
-It uses aria2c (https://aria2.github.io/) download utility to handle actual concurrent downloads
+It uses wget download utility to handle actual concurrent downloads
 
 
 ## Architecture Diagram
@@ -101,6 +101,7 @@ select count(*),CAST(beginposition as DATE) as start_date from granule where exp
 * Create S3 buckets to store downloads and logs
 * Copy the repository code inside EC2 instance
 * Run install.sh inside EC2 instance which will install required system packages as well as aria2c (https://aria2.github.io/manual/en/html/README.html) which is used to download files from Sentinel International Access Hub(https://inthub.copernicus.eu/)
+* Install wget
 * Install python depedencies 
      sudo pip3 install -r requirements.txt 
 * Create folder inside EC2 instance to temporarily store downloads and log files
@@ -111,13 +112,6 @@ select count(*),CAST(beginposition as DATE) as start_date from granule where exp
 * Now run ./start.sh to start the downloader and ./stop.sh to stop the downloader
 
 
-## Manual download test
-
-It is possible to manually run the download of the files for testing using aria2c as below. Note set the valid values for username, password, downloads dir, and input urls text file
-
-```
-aria2c --max-concurrent-downloads=15 --split=1 --http-user=<username> --http-passwd=<password>  --dir=<downloads_dir> --allow-overwrite=true --input-file=<urls.txt> 
-```
 
 ## Available Logs
 
