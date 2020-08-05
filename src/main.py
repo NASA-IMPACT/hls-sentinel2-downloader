@@ -434,16 +434,16 @@ def do_downloads():
     '''
     global open_connections
 
-    log(f"#threads = {active_count()}, #downloads in progress = {get_wget_count()}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    log(f"#threads = {active_count()}, #open_connections = {open_connections}, #downloads in progress = {get_wget_count()}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
     log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
     if USE_SCIHUB_TO_FETCH_LINKS or (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
-        maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT
+        maximum_connections = MAX_CONCURRENT_INTHUB_LIMIT
     else:
-        maximum_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
+        maximum_connections = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
-    if open_connections < maximum_downloads:
+    if open_connections < maximum_connections:
         try:
             wget_file_worker = Thread(
                 name="wget_file_worker", target=download_file, args=())
