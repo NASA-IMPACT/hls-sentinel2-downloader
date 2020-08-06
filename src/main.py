@@ -238,7 +238,6 @@ def download_file():
         put a file to download in aria2's queue by fetching a link from the database
     '''
     global active_urls
-    #global open_connections
 
     thread_manager.lock.acquire()
     thread_manager.open_connections = thread_manager.open_connections + 1
@@ -374,13 +373,9 @@ def download_file():
             thread_manager.download_queue.put({"file_path": file_path, "success": True})
             log(f"download complete and hash verified for {file_path}", "status")
 
-
-
         thread_manager.lock.acquire()
-        thread_manager.open_connections = thread_manager.open_connections - 1
         active_urls.remove(granule_to_download.download_url)
         thread_manager.lock.release()
-
 
     else:
         log(f"file already uploaded = {filename}", "status")
@@ -392,6 +387,14 @@ def download_file():
         granule_to_download.save()
         db.close()
         thread_manager.lock.release()
+    
+    log(f"download_file function finished, decreasing count open_connections", "status")
+    try:
+        thread_manager.lock.acquire()
+        thread_manager.open_connections = thread_manager.open_connections - 1
+        thread_manager.lock.release()
+    except Exception as e:
+        log(f"Error: unable to decrement open_connections count {str(e)}", "error")
 
 
 def is_active_url(url):
@@ -434,10 +437,9 @@ def do_downloads():
     '''
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
-    #global open_connections
 
-    log(f"#threads = {thread_manager.active_count()}, #open_connections = {thread_manager.open_connections}, #downloads in progress = {get_wget_count()}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
-    log(f"{get_memory_usage()}", "status")
+    log(f"#threads = {thread_manager.active_count()}, #open_connections = {thread_manager.open_connections},  #active_urls = {len(active_urls)}, #running wget count = {get_wget_count()}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    #log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
     if USE_SCIHUB_TO_FETCH_LINKS or (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
@@ -445,7 +447,7 @@ def do_downloads():
     else:
         maximum_connections = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
-    if thread_manager.open_connections < maximum_connections:
+    if len(active_urls) < maximum_connections:
         try:
             wget_file_worker = thread_manager.Thread(
                 name="wget_file_worker", target=download_file, args=())
