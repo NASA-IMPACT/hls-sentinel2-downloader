@@ -21,7 +21,7 @@ from log_manager import log, s3_upload_logs
 from links_manager import fetch_links
 from metrics_collector import collect_metrics
 from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, DOWNLOAD_BY_DAY, LOCK_FILE, FETCH_LINKS, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS, COPERNICUS_USERNAME, COPERNICUS_PASSWORD, WGET_TIMEOUT, WGET_TRIES, WGET_WAITRETRY
-from thread_manager import lock, download_queue, upload_queue, Thread, active_count
+from thread_manager import lock, download_queue, upload_queue, Thread, active_count, open_connections
 
 
 # required to print colors in both UNIX and Windows OS
@@ -30,7 +30,6 @@ fetch_links_worker = None
 upload_orphan_downloads_worker = None
 download_file_worker = None
 active_urls = []
-open_connections = 0
 
 def check_downloads_folder_size():
     '''
@@ -241,7 +240,7 @@ def download_file():
     '''
     global active_urls
     global open_connections
-
+    
     lock.acquire()
     open_connections = open_connections + 1
     lock.release()
@@ -366,7 +365,7 @@ def download_file():
             log(f"unable to do hash of {file_path}", "error")
 
         if not hash.lower() == granule_to_download.checksum.lower():
-            log(f'Error: downloading {granule_to_download.filename} failed with wget return code {p.returncode}.\n {p.stderr}', "status")
+            log(f'Error: downloading {granule_to_download.filename} failed with wget return code {p.returncode}.\n {p.stderr}', "error")
             download_queue.put({"url": granule_to_download.download_url, "success": False})
         else:
             download_queue.put({"file_path": file_path, "success": True})
@@ -432,7 +431,6 @@ def do_downloads():
     '''
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
-    global open_connections
 
     log(f"#threads = {active_count()}, #open_connections = {open_connections}, #downloads in progress = {get_wget_count()}, #Upload Queue = {upload_queue.qsize()}, #Download Queue = {download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
     log(f"{get_memory_usage()}", "status")

@@ -146,7 +146,10 @@ def fetch_links(fetch_day):
 
         log(f'fetching {SEARCH_URL} with params {json_dump(params)}', 'links')
 
-        response = get(SEARCH_URL, params, auth=AUTH)
+        try:
+            response = get(SEARCH_URL, params, auth=AUTH)
+        except Exception as e:
+            log(f"unable fetch links {str(e)}", "error")
 
         log(f'fetched {SEARCH_URL} with status {response.status_code}', 'links')
 

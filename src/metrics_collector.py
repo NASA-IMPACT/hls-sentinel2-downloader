@@ -9,7 +9,7 @@ from models import granule, granule_count, status, db
 from utils import get_folder_size, get_wget_count
 from settings import LOGS_PATH, DOWNLOADS_PATH
 from log_manager import log
-from thread_manager import lock, active_count, upload_queue, download_queue
+from thread_manager import lock, active_count, upload_queue, download_queue, open_connections
 
 
 def collect_metrics():
@@ -36,6 +36,7 @@ def collect_metrics():
     metrics['total_granules_downloaded'] = granule.select().where(
         granule.downloaded == True).count()
     metrics['total_downloads_in_progress'] = get_wget_count()
+    metrics['total_open_connections'] = open_connections
     metrics['total_upload_queue_items'] = upload_queue.qsize()
     metrics['total_download_queue_items'] = download_queue.qsize()
     metrics['total_active_threads'] = active_count()
