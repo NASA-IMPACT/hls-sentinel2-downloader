@@ -9,14 +9,14 @@ from models import granule, granule_count, status, db
 from utils import get_folder_size, get_wget_count
 from settings import LOGS_PATH, DOWNLOADS_PATH
 from log_manager import log
-from thread_manager import lock, active_count, upload_queue, download_queue, open_connections
-
+import thread_manager
 
 def collect_metrics():
     '''
         collect metrics in JSON format and store in logs folder
     '''
-    lock.acquire()
+
+    thread_manager.lock.acquire()
     db.connect()
 
     metrics = {}
@@ -36,10 +36,10 @@ def collect_metrics():
     metrics['total_granules_downloaded'] = granule.select().where(
         granule.downloaded == True).count()
     metrics['total_downloads_in_progress'] = get_wget_count()
-    metrics['total_open_connections'] = open_connections
-    metrics['total_upload_queue_items'] = upload_queue.qsize()
-    metrics['total_download_queue_items'] = download_queue.qsize()
-    metrics['total_active_threads'] = active_count()
+    metrics['total_open_connections'] = thread_manager.open_connections
+    metrics['total_upload_queue_items'] = thread_manager.upload_queue.qsize()
+    metrics['total_download_queue_items'] = thread_manager.download_queue.qsize()
+    metrics['total_active_threads'] = thread_manager.active_count()
     metrics['log_folder_size'] = get_folder_size(LOGS_PATH)
     metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
     metrics['count_download_folder_files'] = len(
@@ -70,5 +70,5 @@ def collect_metrics():
         metrics['cpu4_percent'] = cpu4
 
     db.close()
-    lock.release()
+    thread_manager.lock.release()
     log(json_dump(metrics), 'metrics')
