@@ -111,7 +111,7 @@ def remove_file(file_path):
         log(f'removing file {file_path}', 'status')
         remove(file_path)
     except Exception as e:
-        log(f'error: cannot remove {file_path} {str(e)}', 'error')
+        log(f'cannot remove {file_path} {str(e)}', 'error')
 
 
 def clean_up_downloads():

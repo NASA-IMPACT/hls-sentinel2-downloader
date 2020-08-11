@@ -202,9 +202,12 @@ def fetch_links(fetch_day):
                         elif s['name'] == "tileid":
                             tileid = s['content']
 
-                    #log(f'getting checksum for {id}','links')
-                    checksum = get_checksum(PRODUCT_URL.format(id))
-                    #log(f'got checksum {checksum} for {id}','links')
+
+                    try:
+                        checksum = get_checksum(PRODUCT_URL.format(id))
+                    except Exception as e:
+                        log(f'failed getting checksum for {id}', 'error')
+
 
                     download_url = get_download_link(PRODUCT_URL.format(id))
 

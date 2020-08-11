@@ -82,7 +82,7 @@ def start_links_fetch():
                 sleep(3)
             fetch_links_worker.join()
     except RuntimeError as runtime_err:
-        log(f'RuntimeError: {str(runtime_err)}', 'error')
+        log(f'encountered runtime exception: {str(runtime_err)}', 'error')
 
 
 def upload_file(file_path):
@@ -138,13 +138,13 @@ def upload_file(file_path):
         thread_manager.lock.release()
 
     except MemoryError as memory_err:
-        log(f'Memory Error', 'error')
+        log(f'got memory error', 'error')
         remove_file(file_path)
     except UnicodeDecodeError as unicode_error:
-        log(f'Unicode decode error during download of {file_path}', 'error')
+        log(f'got unicode decode error during download of {file_path}', 'error')
         remove_file(file_path)
     except Exception as e:
-        log(f'error during file_downloaded event: {str(e)}', 'error')
+        log(f'got exception during file_downloaded event: {str(e)}', 'error')
         remove_file(file_path)
 
 
@@ -239,10 +239,6 @@ def download_file():
     '''
     global active_urls
 
-    thread_manager.lock.acquire()
-    thread_manager.open_connections = thread_manager.open_connections + 1
-    thread_manager.lock.release()
-
     query = (
         granule.select()
         .where(granule.ignore_file == False)
@@ -252,6 +248,10 @@ def download_file():
         .where(granule.download_failed == False)
         .where(granule.expired == False)
     )
+    '''
+        Note: we can add logic to ignore files which have failed certain number of tries, 
+        however we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
+    '''
 
     if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
         start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
@@ -288,7 +288,7 @@ def download_file():
             log(f'{granule_to_download_count} left to download', "status")
 
     except Exception as e:
-        log(f"No file to download found", "status")
+        log(f"no file to download found", "status")
         db.close()
         thread_manager.lock.release()
 
@@ -297,8 +297,8 @@ def download_file():
 
         return
 
-    db.close()
-    thread_manager.lock.release()
+    ######db.close()
+    #####thread_manager.lock.release()
 
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
@@ -313,17 +313,22 @@ def download_file():
             # upload only if upload_orphan_downloads_worker is not running
             if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
                 thread_manager.download_queue.put({"file_path": file_path, "success": True})
+            
+            db.close() #close if open
+            thread_manager.lock.release() #release if acquired
             return
 
     if is_active_url(granule_to_download.download_url):
         # file is already being downloaded
         log(f"{str(datetime.now())}, file {granule_to_download.download_url} is already in download queue", "status")
+        db.close() #close if open
+        thread_manager.lock.release() #release if acquired
         return
 
     # check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
-        thread_manager.lock.acquire()
-        db.connect()
+        ######thread_manager.lock.acquire()
+        ######db.connect()
         granule_to_download.retry = granule_to_download.retry + 1
         granule_to_download.in_progress = True
         granule_to_download.download_started = datetime.now()
@@ -363,10 +368,10 @@ def download_file():
             log(f"unable to do hash of {file_path}", "error")
 
         if not hash.lower() == granule_to_download.checksum.lower():
-            log(f'Error: downloading {granule_to_download.filename}, hash verification failed and wget return code is {p.returncode}.\n {p.stderr}', "error")
+            log(f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error") #use {p.stderr} to log actual response
             
             if not p.returncode == 0:
-                log(f'Wget StdErr: {p.stderr}','error')
+                log(f'got wget standard error {p.stderr}','error')
 
             thread_manager.download_queue.put({"url": granule_to_download.download_url, "success": False})
         else:
@@ -387,14 +392,6 @@ def download_file():
         granule_to_download.save()
         db.close()
         thread_manager.lock.release()
-    
-    log(f"download_file function finished, decreasing count open_connections", "status")
-    try:
-        thread_manager.lock.acquire()
-        thread_manager.open_connections = thread_manager.open_connections - 1
-        thread_manager.lock.release()
-    except Exception as e:
-        log(f"Error: unable to decrement open_connections count {str(e)}", "error")
 
 
 def is_active_url(url):
@@ -430,7 +427,7 @@ def upload_orphan_downloads():
                 log(f'uploading {file_path} with time {modify_date}', 'status')
                 upload_file(file_path)
         except Exception as e:
-            log(f'error during running orphan file checker {str(e)}', 'error')
+            log(f'orphan file checker failed {str(e)}', 'error')
 
 
 def do_downloads():
@@ -438,7 +435,10 @@ def do_downloads():
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
 
-    log(f"#threads = {thread_manager.active_count()}, #open_connections = {thread_manager.open_connections},  #active_urls = {len(active_urls)}, #running wget count = {get_wget_count()}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    #update number of open connections so that metrics collector can log it
+    thread_manager.open_connections = len(active_urls)
+    
+    log(f"#active urls = {thread_manager.open_connections}, #running wget count = {get_wget_count()}, #threads = {thread_manager.active_count()}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
     #log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
@@ -453,7 +453,7 @@ def do_downloads():
                 name="wget_file_worker", target=download_file, args=())
             wget_file_worker.start()
         except Exception as e:
-            log(f"error during initiaing downloads:{str(e)}", "status")
+            log(f"Unable to initialize downloads:{str(e)}", "status")
 
 
 def check_queues():
@@ -506,7 +506,7 @@ def check_queues():
                 granule_to_download.in_progress = False
                 granule_to_download.save()
             except Exception as e:
-                log(f'error: cannot set uploaded = True:{str(e)}', 'error')
+                log(f'cannot set uploaded = True:{str(e)}', 'error')
             db.close()
             thread_manager.lock.release()
 
@@ -573,8 +573,8 @@ def init():
 
 # check if any previous instance is already running
 if file_is_locked():
-    log(f'Can not start the downloader: another instance is running', 'error')
+    log(f'can not start the downloader: another instance is running', 'error')
     exit(0)
 else:
-    log(f'Starting the downloader: no other running instance found', 'status')
+    log(f'starting the downloader: no other running instance found', 'status')
     init()

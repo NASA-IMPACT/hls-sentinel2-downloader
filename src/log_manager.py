@@ -77,7 +77,7 @@ def log(msg, type):
     if DEBUG and type == 'status':
         print(log_msg)
     elif DEBUG and type == 'error':
-        print(Fore.RED + log_msg)
+        print(f'{Fore.RED} Error: {log_msg}')
 
 
 def s3_upload_logs():
