@@ -99,6 +99,7 @@ def upload_file(file_path):
         return
 
     try:
+        log(f'starting file upload {file_path}', 'status')
         thread_manager.lock.acquire()
         db.connect()
         query = granule.select().where(granule.filename == filename).limit(1).offset(0)
@@ -237,6 +238,10 @@ def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
+
+    thread_manager.lock.acquire()
+    db.connect()
+
     global active_urls
 
     query = (
@@ -247,6 +252,7 @@ def download_file():
         .where(granule.uploaded == False)
         .where(granule.download_failed == False)
         .where(granule.expired == False)
+        .where(granule.retry < 1000)
     )
     '''
         Note: we can add logic to ignore files which have failed certain number of tries, 
@@ -262,9 +268,6 @@ def download_file():
     # download oldest available first
     query = query.order_by(granule.beginposition.asc())
 
-    thread_manager.lock.acquire()
-    db.connect()
-
     try:
 
         granule_to_download = query.get()
@@ -275,7 +278,6 @@ def download_file():
                 log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
             else:
                 # when all the files for given day are downloaded, set download day to oldest available day
-                # TODO: add logic to not download files older than 21 days
                 granule_to_download_time = granule_to_download.beginposition.strftime(
                     "%Y-%m-%d")
                 DOWNLOAD_DAY = granule_to_download_time
@@ -297,8 +299,6 @@ def download_file():
 
         return
 
-    ######db.close()
-    #####thread_manager.lock.release()
 
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
@@ -309,7 +309,7 @@ def download_file():
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
             # checksum matched that means file is already downloaded
-            log(f"{str(datetime.now())}, found existing file in downloads dir = {filename}", "status")
+            log(f"found existing file in downloads dir = {filename}", "status")
             # upload only if upload_orphan_downloads_worker is not running
             if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
                 thread_manager.download_queue.put({"file_path": file_path, "success": True})
@@ -320,7 +320,10 @@ def download_file():
 
     if is_active_url(granule_to_download.download_url):
         # file is already being downloaded
-        log(f"{str(datetime.now())}, file {granule_to_download.download_url} is already in download queue", "status")
+        log(f"file {granule_to_download.download_url} is already in download queue", "error")
+        granule_to_download.retry = granule_to_download.retry + 1
+        granule_to_download.in_progress = True
+        granule_to_download.save()
         db.close() #close if open
         thread_manager.lock.release() #release if acquired
         return
@@ -385,6 +388,9 @@ def download_file():
     else:
         log(f"file already uploaded = {filename}", "status")
 
+        db.close() #close if open
+        thread_manager.lock.release() #release if acquired
+
         thread_manager.lock.acquire()
         db.connect()
         granule_to_download.uploaded = True
@@ -438,7 +444,7 @@ def do_downloads():
     #update number of open connections so that metrics collector can log it
     thread_manager.open_connections = len(active_urls)
     
-    log(f"#active urls = {thread_manager.open_connections}, #running wget count = {get_wget_count()}, #threads = {thread_manager.active_count()}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
+    log(f"#active urls = {thread_manager.open_connections}, #running wget count = {get_wget_count()}, #threads = {thread_manager.active_count()}, Downloads Size = {get_download_folder_size()} GB", "status")
     #log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15

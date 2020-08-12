@@ -3,7 +3,7 @@ from json import dumps as json_dump
 from requests import get
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
-from thread_manager import lock
+import thread_manager
 
 # import internal functions
 from models import status, granule_count, granule, db
@@ -104,7 +104,7 @@ def fetch_links(fetch_day):
 
     global status, granule_count, granule, db
 
-    lock.acquire()
+    thread_manager.lock.acquire()
     db.connect()
     try:
         fetch_day_available_links = granule_count.get(
@@ -117,7 +117,7 @@ def fetch_links(fetch_day):
         fetch_day_available_links = 0
         fetch_day_fetched_links = 0
     db.close()
-    lock.release()
+    thread_manager.lock.release()
 
     start_date = str(fetch_day) + 'T00:00:00Z'  # open search API format
     end_date = str(fetch_day) + 'T23:59:59Z'  # open search API format
@@ -171,14 +171,14 @@ def fetch_links(fetch_day):
             entries = feed['entry']
             fetched_entries = len(entries)
 
-            lock.acquire()
+            thread_manager.lock.acquire()
             db.connect()
             granule_counter = granule_count.get(
                 granule_count.date == fetch_day)
             granule_counter.available_links = total_results
             granule_counter.save()
             db.close()
-            lock.release()
+            thread_manager.lock.release()
 
             try:
                 for entry in entries:
@@ -220,7 +220,7 @@ def fetch_links(fetch_day):
                     else:
                         ignore_file = True
 
-                    lock.acquire()
+                    thread_manager.lock.acquire()
                     db.connect()
 
                     # check and add only a new link in the database
@@ -231,7 +231,7 @@ def fetch_links(fetch_day):
                         log(f'skipping {id} as it already exists in database', 'links')
 
                     db.close()
-                    lock.release()
+                    thread_manager.lock.release()
 
             except TypeError as e:
                 log(f'Type error for entry object {str(entry)}', 'error')
@@ -239,16 +239,16 @@ def fetch_links(fetch_day):
             total_fetched_entries += fetched_entries
             params['start'] += fetched_entries
 
-            lock.acquire()
+            thread_manager.lock.acquire()
             db.connect()
             last_linked_fetched_time = status.get(
                 status.key_name == 'last_linked_fetched_time')
             last_linked_fetched_time.value = str(datetime.now())
             last_linked_fetched_time.save()
             db.close()
-            lock.release()
+            thread_manager.lock.release()
 
-            lock.acquire()
+            thread_manager.lock.acquire()
             db.connect()
             try:
                 granule_counter = granule_count.get(
@@ -261,7 +261,7 @@ def fetch_links(fetch_day):
                 log(f'error: {str(e)}, {filename}', 'error')
 
             db.close()
-            lock.release()
+            thread_manager.lock.release()
 
             if (total_fetched_entries >= total_results):
                 break
