@@ -53,13 +53,13 @@ def log(msg, type):
     '''
         based on type decide the log format
     '''
-    # TODO add print statement here
-    # TODO figure out way to capture nohup output
-    # TODO add error logs to status logs as well?
-    # TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
-    # TODO make sure nohup output and status log have same content
 
-    log_msg = f'{str(datetime.now())}, {msg}'
+    # TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
+
+    if type == 'error':
+        log_msg = f'{str(datetime.now())}, {Fore.RED} ERROR: {msg}'
+    else:
+        log_msg = f'{str(datetime.now())}, {msg}'
 
     if type == 'status':
         status_logger.info(log_msg)
@@ -74,10 +74,9 @@ def log(msg, type):
         status_logger.info(log_msg)
         error_logger.info(log_msg)
 
-    if DEBUG and type == 'status':
+    if DEBUG and (type == 'status' or type == 'error' ):
         print(log_msg)
-    elif DEBUG and type == 'error':
-        print(f'{Fore.RED}Error: {log_msg}')
+    
 
 
 def s3_upload_logs():

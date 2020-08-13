@@ -320,7 +320,7 @@ def download_file():
 
     if is_active_url(granule_to_download.download_url):
         # file is already being downloaded
-        log(f"file {granule_to_download.download_url} is already in download queue", "error")
+        log(f"file {filename} is already in download queue", "error")
         granule_to_download.retry = granule_to_download.retry + 1
         granule_to_download.in_progress = True
         granule_to_download.save()
@@ -330,20 +330,16 @@ def download_file():
 
     # check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
-        ######thread_manager.lock.acquire()
-        ######db.connect()
         granule_to_download.retry = granule_to_download.retry + 1
         granule_to_download.in_progress = True
         granule_to_download.download_started = datetime.now()
         granule_to_download.save()
-        db.close()
-        thread_manager.lock.release()
-
 
         log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}", "status",)
 
-        thread_manager.lock.acquire()
         active_urls.append(granule_to_download.download_url)
+
+        db.close()
         thread_manager.lock.release()
 
         # start wget to download of file  
@@ -368,14 +364,16 @@ def download_file():
         try:
             hash = md5(open(file_path, 'rb').read()).hexdigest()
         except Exception as e:
-            log(f"unable to do hash of {file_path}", "error")
+            pass
+            #log(f"unable to do hash of {file_path}", "error")
 
         if not hash.lower() == granule_to_download.checksum.lower():
-            log(f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error") #use {p.stderr} to log actual response
-            
+           
             if not p.returncode == 0:
                 log(f'got wget standard error {p.stderr}','error')
-
+            else:
+                log(f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error") #use {p.stderr} to log actual response
+            
             thread_manager.download_queue.put({"url": granule_to_download.download_url, "success": False})
         else:
             thread_manager.download_queue.put({"file_path": file_path, "success": True})
