@@ -57,7 +57,7 @@ def log(msg, type):
     # TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
 
     if type == 'error':
-        log_msg = f'{str(datetime.now())}, {Fore.RED} ERROR: {msg}'
+        log_msg = f'{str(datetime.now())}, ERROR: {msg}'  #use {Fore.RED} to print in red
     else:
         log_msg = f'{str(datetime.now())}, {msg}'
 
