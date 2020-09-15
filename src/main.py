@@ -11,10 +11,10 @@ from schedule import every, run_pending
 from re import search
 from subprocess import run
 from hashlib import md5
-
+from peewee import OperationalError
 
 # import custom functions
-from models import status,  granule, db
+from models import status,  granule,  db_connect, db_close
 from s3_uploader import s3_upload_file, s3_file_exists
 from utils import get_checksum_local, kill_wget, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size, get_wget_count
 from log_manager import log, s3_upload_logs
@@ -29,6 +29,7 @@ fetch_links_worker = None
 upload_orphan_downloads_worker = None
 download_file_worker = None
 active_urls = []
+
 
 def check_downloads_folder_size():
     '''
@@ -59,7 +60,7 @@ def check_link_fetcher():
     '''
     if FETCH_LINKS == True and (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
         thread_manager.Thread(name="start_links_fetch",
-               target=start_links_fetch, args=()).start()
+                              target=start_links_fetch, args=()).start()
 
 
 def start_links_fetch():
@@ -101,7 +102,7 @@ def upload_file(file_path):
     try:
         log(f'starting file upload {file_path}', 'status')
         thread_manager.lock.acquire()
-        db.connect()
+        db_connect()
         query = granule.select().where(granule.filename == filename).limit(1).offset(0)
         granule_to_download = query.get()
         granule_to_download.downloaded = True
@@ -109,7 +110,7 @@ def upload_file(file_path):
         granule_to_download.download_failed = False
         granule_to_download.download_finished = datetime.now()
         granule_to_download.save()
-        db.close()
+        db_close()
         thread_manager.lock.release()
 
         granule_to_download_size = granule_to_download.size
@@ -127,22 +128,24 @@ def upload_file(file_path):
             s3_upload_worker.start()
         else:
             log(f'checksum did not match for {file_path}', 'error')
-            thread_manager.upload_queue.put({"file_path": file_path, "success": False})
+            thread_manager.upload_queue.put(
+                {"file_path": file_path, "success": False})
 
         thread_manager.lock.acquire()
-        db.connect()
+        db_connect()
         last_file_download_time = status.get(
             status.key_name == 'last_file_download_time')
         last_file_download_time.value = str(datetime.now())
         last_file_download_time.save()
-        db.close()
+        db_close()
         thread_manager.lock.release()
 
     except MemoryError as memory_err:
         log(f'got memory error', 'error')
         remove_file(file_path)
     except UnicodeDecodeError as unicode_error:
-        log(f'got unicode decode error during download of {file_path}', 'error')
+        log(
+            f'got unicode decode error during download of {file_path}', 'error')
         remove_file(file_path)
     except Exception as e:
         log(f'got exception during file_downloaded event: {str(e)}', 'error')
@@ -160,7 +163,7 @@ def requeue_failed(DOWNLOAD_DAY=None):
             end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
 
             thread_manager.lock.acquire()
-            db.connect()
+            db_connect()
 
             query = granule.select().where(granule.download_failed == True).where(
                 granule.beginposition.between(start_date, end_date))
@@ -183,16 +186,16 @@ def requeue_failed(DOWNLOAD_DAY=None):
 
                 log(
                     f"resettting download failed flag for {DOWNLOAD_DAY}", "status")
-                db.close()
+                db_close()
                 thread_manager.lock.release()
                 return True
             else:
-                db.close()
+                db_close()
                 thread_manager.lock.release()
                 return False
         else:
             thread_manager.lock.acquire()
-            db.connect()
+            db_connect()
 
             # reset failed downloads
             granule.update(in_progress=False, downloaded=False, download_failed=False,
@@ -206,10 +209,14 @@ def requeue_failed(DOWNLOAD_DAY=None):
             granule.update(in_progress=False).execute()
 
             log(f"resetting flags to download all remaining files", "status")
-            db.close()
+            db_close()
             thread_manager.lock.release()
             return True
-
+    except OperationalError as ops_err:
+        log(f'could not connect to the database: {str(ops_err)}', 'error')
+        if thread_manager.lock.locked_lock() == True:
+            thread_manager.lock.release()
+        return False
     except Exception as e:
         log(f"failed resettting download failed flag", "error")
         return False
@@ -222,180 +229,197 @@ def expire_links():
     last_day = date.today() + timedelta(days=-20)
 
     thread_manager.lock.acquire()
-    db.connect()
+    db_connect()
 
-    # mark links as expired
-    granule.update(expired=True).where(
-        granule.beginposition < last_day).execute()
+    try:
+        # mark links as expired
+        granule.update(expired=True).where(
+            granule.beginposition < last_day).execute()
+    except OperationalError as ops_err:
+        log(f'could not connect to the database: {str(ops_err)}', 'error')
 
     log(f"expiring links older than 21 days", "status")
 
-    db.close()
-    thread_manager.lock.release()
+    db_close()
+    if thread_manager.lock.locked_lock() == True:
+        thread_manager.lock.release()
 
 
 def download_file():
     '''
-        put a file to download in aria2's queue by fetching a link from the database
+        download a file by fetching a link from the database
     '''
-
-    thread_manager.lock.acquire()
-    db.connect()
-
-    global active_urls
-
-    query = (
-        granule.select()
-        .where(granule.ignore_file == False)
-        .where(granule.downloaded == False)
-        .where(granule.in_progress == False)
-        .where(granule.uploaded == False)
-        .where(granule.download_failed == False)
-        .where(granule.expired == False)
-        .where(granule.retry < 1000)
-    )
-    '''
-        Note: we can add logic to ignore files which have failed certain number of tries, 
-        however we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
-    '''
-
-    if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
-        start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
-        end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
-        query = query.where(
-            granule.beginposition.between(start_date, end_date))
-
-    # download oldest available first
-    query = query.order_by(granule.beginposition.asc())
-
     try:
+        thread_manager.lock.acquire()
+        db_connect()
 
-        granule_to_download = query.get()
-        granule_to_download_count = query.count()
+        global active_urls
 
-        if DOWNLOAD_BY_DAY:
-            if not DOWNLOAD_DAY == None:
-                log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
+        query = (
+            granule.select()
+            .where(granule.ignore_file == False)
+            .where(granule.downloaded == False)
+            .where(granule.in_progress == False)
+            .where(granule.uploaded == False)
+            .where(granule.download_failed == False)
+            .where(granule.expired == False)
+            .where(granule.retry < 1000)
+        )
+        '''
+            Note: we can add logic to ignore files which have failed certain number of tries, 
+            however we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
+        '''
+
+        if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
+            start_date = str(DOWNLOAD_DAY) + " 00:00:00"  # MySQL format
+            end_date = str(DOWNLOAD_DAY) + " 23:59:59"  # MySQL format
+            query = query.where(
+                granule.beginposition.between(start_date, end_date))
+
+        # download oldest available first
+        query = query.order_by(granule.beginposition.asc())
+
+        try:
+
+            granule_to_download = query.get()
+            granule_to_download_count = query.count()
+
+            if DOWNLOAD_BY_DAY:
+                if not DOWNLOAD_DAY == None:
+                    log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
+                else:
+                    # when all the files for given day are downloaded, set download day to oldest available day
+                    granule_to_download_time = granule_to_download.beginposition.strftime(
+                        "%Y-%m-%d")
+                    DOWNLOAD_DAY = granule_to_download_time
+                    log(
+                        f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
+                    db_close()
+                    thread_manager.lock.release()
+                    return
             else:
-                # when all the files for given day are downloaded, set download day to oldest available day
-                granule_to_download_time = granule_to_download.beginposition.strftime(
-                    "%Y-%m-%d")
-                DOWNLOAD_DAY = granule_to_download_time
-                log(
-                    f"no other download day specified so setting download day to {DOWNLOAD_DAY}", "status")
-                db.close()
+                log(f'{granule_to_download_count} left to download', "status")
+
+        except OperationalError as ops_err:
+            log(f'could not connect to the database: {str(ops_err)}', 'error')
+            if thread_manager.lock.locked_lock() == True:
                 thread_manager.lock.release()
-                return
-        else:
-            log(f'{granule_to_download_count} left to download', "status")
+            return
+        except Exception as e:
+            log(f"no file to download found", "status")
+            db_close()
+            thread_manager.lock.release()
 
-    except Exception as e:
-        log(f"no file to download found", "status")
-        db.close()
-        thread_manager.lock.release()
+            if requeue_failed(DOWNLOAD_DAY) == False:
+                DOWNLOAD_DAY = None  # no files found for current day so resume downloading rest of the days
 
-        if requeue_failed(DOWNLOAD_DAY) == False:
-            DOWNLOAD_DAY = None  # no files found for current day so resume downloading rest of the days
-
-        return
-
-
-    filename = granule_to_download.filename.replace("SAFE", "zip")
-    file_path = f"{DOWNLOADS_PATH}/{filename}"
-
-    # check if file is already downloaded with valid checksum in the downloads folder
-    if path.exists(file_path):
-        granule_expected_checksum = granule_to_download.checksum
-        granule_downloaded_checksum = get_checksum_local(file_path)
-        if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
-            # checksum matched that means file is already downloaded
-            log(f"found existing file in downloads dir = {filename}", "status")
-            # upload only if upload_orphan_downloads_worker is not running
-            if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
-                thread_manager.download_queue.put({"file_path": file_path, "success": True})
-            
-            db.close() #close if open
-            thread_manager.lock.release() #release if acquired
             return
 
-    if is_active_url(granule_to_download.download_url):
-        # file is already being downloaded
-        log(f"file {filename} is already in download queue", "error")
-        granule_to_download.retry = granule_to_download.retry + 1
-        granule_to_download.in_progress = True
-        granule_to_download.save()
-        db.close() #close if open
-        thread_manager.lock.release() #release if acquired
-        return
+        filename = granule_to_download.filename.replace("SAFE", "zip")
+        file_path = f"{DOWNLOADS_PATH}/{filename}"
 
-    # check if file is already uploaded to S3
-    if not s3_file_exists(filename, granule_to_download.beginposition):
-        granule_to_download.retry = granule_to_download.retry + 1
-        granule_to_download.in_progress = True
-        granule_to_download.download_started = datetime.now()
-        granule_to_download.save()
+        # check if file is already downloaded with valid checksum in the downloads folder
+        if path.exists(file_path):
+            granule_expected_checksum = granule_to_download.checksum
+            granule_downloaded_checksum = get_checksum_local(file_path)
+            if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
+                # checksum matched that means file is already downloaded
+                log(
+                    f"found existing file in downloads dir = {filename}", "status")
+                # upload only if upload_orphan_downloads_worker is not running
+                if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
+                    thread_manager.download_queue.put(
+                        {"file_path": file_path, "success": True})
 
-        log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}", "status",)
+                db_close()  # close if open
+                thread_manager.lock.release()  # release if acquired
+                return
 
-        active_urls.append(granule_to_download.download_url)
+        if is_active_url(granule_to_download.download_url):
+            # file is already being downloaded
+            log(f"file {filename} is already in download queue", "error")
+            granule_to_download.retry = granule_to_download.retry + 1
+            granule_to_download.in_progress = True
+            granule_to_download.save()
+            db_close()  # close if open
+            thread_manager.lock.release()  # release if acquired
+            return
 
-        db.close()
-        thread_manager.lock.release()
+        # check if file is already uploaded to S3
+        if not s3_file_exists(filename, granule_to_download.beginposition):
+            granule_to_download.retry = granule_to_download.retry + 1
+            granule_to_download.in_progress = True
+            granule_to_download.download_started = datetime.now()
+            granule_to_download.save()
 
-        # start wget to download of file  
-        p = run(['wget',
-                            '--no-check-certificate',
-                            '--content-disposition',
-                            '--no-http-keep-alive',
-                            '--continue',
-                            f'--user={COPERNICUS_USERNAME}',
-                            f'--password={COPERNICUS_PASSWORD}',
-                            f'--directory-prefix={DOWNLOADS_PATH}',
-                            f'--timeout={WGET_TIMEOUT}',
-                            f'--tries={WGET_TRIES}',
-                            f'--waitretry={WGET_WAITRETRY}',
-                            f'{granule_to_download.download_url}'],
-                            capture_output=True)
+            log(f"file download started = {filename}(retry = {granule_to_download.retry})  for day {str(granule_to_download.beginposition)}", "status",)
 
-        file_path = f'{DOWNLOADS_PATH}/{granule_to_download.filename}'
-        file_path = file_path.replace('SAFE','zip')
+            active_urls.append(granule_to_download.download_url)
 
-        hash = ''
-        try:
-            hash = md5(open(file_path, 'rb').read()).hexdigest()
-        except Exception as e:
-            pass
-            #log(f"unable to do hash of {file_path}", "error")
+            db_close()
+            thread_manager.lock.release()
 
-        if not hash.lower() == granule_to_download.checksum.lower():
-           
-            if not p.returncode == 0:
-                log(f'got wget standard error {p.stderr}','error')
+            # start wget to download of file
+            p = run(['wget',
+                     '--no-check-certificate',
+                     '--content-disposition',
+                     '--no-http-keep-alive',
+                     '--continue',
+                     f'--user={COPERNICUS_USERNAME}',
+                     f'--password={COPERNICUS_PASSWORD}',
+                     f'--directory-prefix={DOWNLOADS_PATH}',
+                     f'--timeout={WGET_TIMEOUT}',
+                     f'--tries={WGET_TRIES}',
+                     f'--waitretry={WGET_WAITRETRY}',
+                     f'{granule_to_download.download_url}'],
+                    capture_output=True)
+
+            file_path = f'{DOWNLOADS_PATH}/{granule_to_download.filename}'
+            file_path = file_path.replace('SAFE', 'zip')
+
+            hash = ''
+            try:
+                hash = md5(open(file_path, 'rb').read()).hexdigest()
+            except Exception as e:
+                pass
+                #log(f"unable to do hash of {file_path}", "error")
+
+            if not hash.lower() == granule_to_download.checksum.lower():
+
+                if not p.returncode == 0:
+                    log(f'got wget standard error {p.stderr}', 'error')
+                else:
+                    # use {p.stderr} to log actual response
+                    log(
+                        f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error")
+
+                thread_manager.download_queue.put(
+                    {"url": granule_to_download.download_url, "success": False})
             else:
-                log(f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error") #use {p.stderr} to log actual response
-            
-            thread_manager.download_queue.put({"url": granule_to_download.download_url, "success": False})
+                thread_manager.download_queue.put(
+                    {"file_path": file_path, "success": True})
+                log(
+                    f"download complete and hash verified for {file_path}", "status")
+
+            thread_manager.lock.acquire()
+            active_urls.remove(granule_to_download.download_url)
+            thread_manager.lock.release()
+
         else:
-            thread_manager.download_queue.put({"file_path": file_path, "success": True})
-            log(f"download complete and hash verified for {file_path}", "status")
+            log(f"file already uploaded = {filename}", "status")
 
-        thread_manager.lock.acquire()
-        active_urls.remove(granule_to_download.download_url)
-        thread_manager.lock.release()
+            db_close()  # close if open
+            thread_manager.lock.release()  # release if acquired
 
-    else:
-        log(f"file already uploaded = {filename}", "status")
-
-        db.close() #close if open
-        thread_manager.lock.release() #release if acquired
-
-        thread_manager.lock.acquire()
-        db.connect()
-        granule_to_download.uploaded = True
-        granule_to_download.download_failed = False
-        granule_to_download.save()
-        db.close()
-        thread_manager.lock.release()
+            thread_manager.lock.acquire()
+            db_connect()
+            granule_to_download.uploaded = True
+            granule_to_download.download_failed = False
+            granule_to_download.save()
+            db_close()
+            thread_manager.lock.release()
+    except Exception as e:
+        log(f'could not start downloading of a file {str(e)}', 'error')
 
 
 def is_active_url(url):
@@ -439,9 +463,9 @@ def do_downloads():
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
 
-    #update number of open connections so that metrics collector can log it
+    # update number of open connections so that metrics collector can log it
     thread_manager.open_connections = len(active_urls)
-    
+
     log(f"#active urls = {thread_manager.open_connections}, #running wget count = {get_wget_count()}, #threads = {thread_manager.active_count()}, Downloads Size = {get_download_folder_size()} GB", "status")
     #log(f"{get_memory_usage()}", "status")
 
@@ -451,7 +475,7 @@ def do_downloads():
     else:
         maximum_connections = MAX_CONCURRENT_INTHUB_LIMIT - 1
 
-    if len(active_urls) < maximum_connections:
+    if (len(active_urls) < maximum_connections) and (thread_manager.active_count() < maximum_connections * 10):
         try:
             wget_file_worker = thread_manager.Thread(
                 name="wget_file_worker", target=download_file, args=())
@@ -475,14 +499,14 @@ def check_queues():
         elif item['success'] == False:
             failed_url = item['url']
             thread_manager.lock.acquire()
-            db.connect()
+            db_connect()
             granule_failed = granule.select().where(
                 granule.download_url == failed_url).get()
             granule_failed.downloaded = False
             granule_failed.in_progress = False
             granule_failed.download_failed = True
             granule_failed.save()
-            db.close()
+            db_close()
             thread_manager.lock.release()
 
             log(f'file aborted = {granule_failed.filename} ({failed_url})  retry={granule_failed.retry} attempts', 'error')
@@ -500,7 +524,7 @@ def check_queues():
             log(f'file uploaded = {filename}', 'status')
 
             thread_manager.lock.acquire()
-            db.connect()
+            db_connect()
             try:
                 query = granule.select().where(granule.filename == filename).limit(1).offset(0)
                 granule_to_download = query.get()
@@ -511,12 +535,12 @@ def check_queues():
                 granule_to_download.save()
             except Exception as e:
                 log(f'cannot set uploaded = True:{str(e)}', 'error')
-            db.close()
+            db_close()
             thread_manager.lock.release()
 
         else:
             thread_manager.lock.acquire()
-            db.connect()
+            db_connect()
             query = granule.select().where(granule.filename == filename).limit(1).offset(0)
             granule_to_download = query.get()
             granule_to_download.downloaded = False
@@ -525,7 +549,7 @@ def check_queues():
             granule_to_download.uploaded = False
             granule_to_download.download_finished = datetime.now()
             granule_to_download.save()
-            db.close()
+            db_close()
             thread_manager.lock.release()
 
         remove_file(file_path)

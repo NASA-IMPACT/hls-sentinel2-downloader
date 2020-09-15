@@ -5,10 +5,37 @@ from peewee import *
 # import internal functions
 from thread_manager import lock
 from settings import DB_HOST, DB_NAME, DB_PASS, DB_PORT, DB_USER
+from log_manager import log
 
 # create database instance
 db = MySQLDatabase(DB_NAME, user=DB_USER, password=DB_PASS,
                    host=DB_HOST, port=DB_PORT)
+
+
+def db_connect():
+    '''
+    connect to the database
+    this function is just a wrapper against db.connect method but enclosed in a try/catch block
+    sometimes database times out so this centralized method can be used to log error messages
+    '''
+    try:
+        db.connect()
+    except Exception as e:
+        log(f'could not connect to the database: {str(e)}', 'error')
+        # if lock.locked_lock() == True:
+        # lock.release()
+
+
+def db_close():
+    '''
+    close the connection to the database
+    this function is just a wrapper against db.close method but enclosed in a try/catch block
+    sometimes database times out so this centralized method can be used to log error messages
+    '''
+    try:
+        db.close()
+    except Exception as e:
+        log(f'could not connect to the database: {str(e)}', 'error')
 
 
 '''
@@ -58,40 +85,61 @@ table_list = [status, granule_count, granule]
 
 
 def create_tables():
+    '''
+    create all tables
+    '''
     db.create_tables(table_list)
 
 
 def drop_tables():
+    '''
+    drop all tables
+    this method is only used during initial development or when you had to delete the database tables
+    '''
     db.drop_tables(table_list)
 
 
 '''
     create tables if they don't exists
 '''
-lock.acquire()
-db.connect()
-create_tables()
-db.close()
-lock.release()
+try:
+    lock.acquire()
+    db_connect()
+    create_tables()
+    db_close()
+    lock.release()
+except Exception as e:
+    log(f'failed database table status check: {str(e)}', 'error')
+    if lock.locked_lock() == True:
+        lock.release()
+
 
 # create default status keys
 lock.acquire()
-db.connect()
+db_connect()
 
 try:
     status_key = status.get(status.key_name == 'last_linked_fetched_time')
-except Exception:
+except OperationalError as ops_err:
+    log(f'could not connect to the database: {str(ops_err)}', 'error')
+except Exception as e:
     status.create(key_name='last_linked_fetched_time', value=0)
 
 try:
     status_key = status.get(status.key_name == 'last_file_uploaded_time')
+except OperationalError as ops_err:
+    log(f'could not connect to the database: {str(ops_err)}', 'error')
 except Exception:
     status.create(key_name='last_file_uploaded_time', value=0)
 
 try:
     status_key = status.get(status.key_name == 'last_file_download_time')
+except OperationalError as ops_err:
+    log(f'could not connect to the database: {str(ops_err)}', 'error')
 except Exception:
     status.create(key_name='last_file_download_time', value=0)
 
-db.close()
-lock.release()
+db_close()
+
+if lock.locked_lock() == True:
+    lock.release()
