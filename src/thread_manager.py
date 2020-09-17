@@ -7,3 +7,4 @@ open_connections = 0
 lock = Lock()
 download_queue = Queue()
 upload_queue = Queue()
+error_count = 0

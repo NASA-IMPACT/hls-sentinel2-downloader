@@ -222,11 +222,15 @@ def requeue_failed(DOWNLOAD_DAY=None):
         return False
 
 
-def expire_links():
+def expire_links(days=None):
     '''
-        expire links older than 21 days (today + last 20 days)
+        expire older links 
     '''
-    last_day = date.today() + timedelta(days=-20)
+
+    if days is None:
+        days = -21  # default value
+
+    last_day = date.today() + timedelta(days=days)
 
     thread_manager.lock.acquire()
     db_connect()
@@ -234,11 +238,11 @@ def expire_links():
     try:
         # mark links as expired
         granule.update(expired=True).where(
-            granule.beginposition < last_day).execute()
+            granule.beginposition <= last_day).execute()
     except OperationalError as ops_err:
         log(f'could not connect to the database: {str(ops_err)}', 'error')
 
-    log(f"expiring links older than 21 days", "status")
+    log(f"expiring links older than {days} days", "status")
 
     db_close()
     if thread_manager.lock.locked_lock() == True:
@@ -392,6 +396,8 @@ def download_file():
                     # use {p.stderr} to log actual response
                     log(
                         f'hash verification failed during downloading {granule_to_download.filename} with wget return code {p.returncode}', "error")
+
+                thread_manager.error_count += 1
 
                 thread_manager.download_queue.put(
                     {"url": granule_to_download.download_url, "success": False})
@@ -568,8 +574,8 @@ def init():
     # remove orphan files in downloads folder
     clean_up_downloads()
 
-    # expire links older than 21 days
-    expire_links()
+    # expire links older than today
+    expire_links(days=-1)
 
     # start the link fetcher
     check_link_fetcher()
@@ -585,10 +591,11 @@ def init():
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
-    every(1).minutes.do(run_threaded, collect_metrics)
+    every(15).seconds.do(run_threaded, collect_metrics)
+    #every(1).minutes.do(run_threaded, collect_metrics)
     every(15).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
-    every(24).hours.do(expire_links)
+    every(24).hours.do(expire_links, days=-21)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
     every(30).minutes.do(requeue_failed)

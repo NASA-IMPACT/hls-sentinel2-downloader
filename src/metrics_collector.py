@@ -43,6 +43,9 @@ def collect_metrics():
         metrics['total_upload_queue_items'] = thread_manager.upload_queue.qsize()
         metrics['total_download_queue_items'] = thread_manager.download_queue.qsize()
         metrics['total_active_threads'] = thread_manager.active_count()
+        metrics['error_count'] = thread_manager.error_count
+        # reset error count
+        thread_manager.error_count = 0
         metrics['log_folder_size'] = get_folder_size(LOGS_PATH)
         metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
         metrics['count_download_folder_files'] = len(
