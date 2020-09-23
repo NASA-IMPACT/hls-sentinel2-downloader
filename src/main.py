@@ -267,11 +267,11 @@ def download_file():
             .where(granule.uploaded == False)
             .where(granule.download_failed == False)
             .where(granule.expired == False)
-            .where(granule.retry < 1000)
+            .where(granule.retry < 160)
         )
         '''
-            Note: we can add logic to ignore files which have failed certain number of tries, 
-            however we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
+            Note: if a failed granule is retried 160 times every 3 hours, we will keep retrying it for 21 days.
+            However we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
         '''
 
         if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
