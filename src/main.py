@@ -592,13 +592,12 @@ def init():
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
     every(15).seconds.do(run_threaded, collect_metrics)
-    #every(1).minutes.do(run_threaded, collect_metrics)
     every(15).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-21)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     every(2).seconds.do(do_downloads)
-    every(30).minutes.do(requeue_failed)
+    every(180).minutes.do(requeue_failed)
 
     # start the scheduler
     while True:
