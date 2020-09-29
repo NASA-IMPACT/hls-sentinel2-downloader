@@ -5,20 +5,20 @@ from glob import glob1
 from psutil import virtual_memory, cpu_percent, cpu_count
 
 # import internal functions
-from models import granule, granule_count, status, db
+from models import granule, granule_count, status, db, db_connect, db_close
 from utils import get_folder_size
 from settings import LOGS_PATH, DOWNLOADS_PATH
 from download_manager import get_active_urls
 from log_manager import log
-from thread_manager import lock, active_count, upload_queue, download_queue
+import thread_manager
 
 
 def collect_metrics():
     '''
         collect metrics in JSON format and store in logs folder
     '''
-    lock.acquire()
-    db.connect()
+    thread_manager.lock.acquire()
+    db_connect()
 
     metrics = {}
     metrics['datetime'] = str(datetime.now())
@@ -37,9 +37,12 @@ def collect_metrics():
     metrics['total_granules_downloaded'] = granule.select().where(
         granule.downloaded == True).count()
     metrics['total_downloads_in_progress'] = len(get_active_urls())
-    metrics['total_upload_queue_items'] = upload_queue.qsize()
-    metrics['total_download_queue_items'] = download_queue.qsize()
-    metrics['total_active_threads'] = active_count()
+    metrics['total_upload_queue_items'] = thread_manager.upload_queue.qsize()
+    metrics['total_download_queue_items'] = thread_manager.download_queue.qsize()
+    metrics['total_active_threads'] = thread_manager.active_count()
+    metrics['error_count'] = thread_manager.error_count
+    # reset error count
+    thread_manager.error_count = 0
     metrics['log_folder_size'] = get_folder_size(LOGS_PATH)
     metrics['download_folder_size'] = get_folder_size(DOWNLOADS_PATH)
     metrics['count_download_folder_files'] = len(
@@ -71,6 +74,6 @@ def collect_metrics():
         metrics['cpu3_percent'] = cpu3
         metrics['cpu4_percent'] = cpu4
 
-    db.close()
-    lock.release()
+    db_close
+    thread_manager.lock.release()
     log(json_dump(metrics), 'metrics')

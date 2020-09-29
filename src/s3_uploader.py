@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 from settings import S3_UPLOAD_BUCKET, DEBUG
 from log_manager import log
 from thread_manager import lock, upload_queue
-from models import status, db
+from models import status, db, db_connect, db_close
 
 s3_client = client('s3')
 
@@ -59,12 +59,12 @@ def s3_upload_file(file_path, date):
         s3_client.upload_file(file_path, S3_UPLOAD_BUCKET,
                               key, Config=transfer_config)
         lock.acquire()
-        db.connect()
+        db_connect
         last_file_uploaded_time = status.get(
             status.key_name == 'last_file_uploaded_time')
         last_file_uploaded_time.value = str(datetime.now())
         last_file_uploaded_time.save()
-        db.close()
+        db_close
         lock.release()
 
         upload_queue.put({"file_path": file_path, "success": True})

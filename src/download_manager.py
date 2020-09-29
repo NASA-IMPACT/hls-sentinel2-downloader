@@ -6,7 +6,7 @@ from datetime import datetime
 import aria2p
 
 # import internal functions
-from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, DEBUG
+from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, DEBUG, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS
 from log_manager import log
 from thread_manager import download_queue
 
@@ -82,11 +82,18 @@ def start_aria2():
         start aria2
         ref - https://www.cyberciti.biz/faq/python-execute-unix-linux-command-examples/
     '''
+
+    # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
+    if USE_SCIHUB_TO_FETCH_LINKS:
+        max_downloads = MAX_CONCURRENT_INTHUB_LIMIT
+    else:
+        max_downloads = MAX_CONCURRENT_INTHUB_LIMIT - 1
+
     p = subprocess_Popen(
         [
             "aria2c",
             "--enable-http-keep-alive=true",
-            "--max-concurrent-downloads=15",
+            f"--max-concurrent-downloads={max_downloads}",
             "--max-connection-per-server=1",
             "--split=1",
             f"--http-user={COPERNICUS_USERNAME}",
@@ -141,3 +148,15 @@ def get_active_urls():
         init_aria2()
 
     return aria2_client.tell_active()
+
+
+def get_waiting_urls():
+    '''
+        get waiting downloads from aria2
+    '''
+    global aria2
+
+    if aria2 is None or aria2_client is None:
+        init_aria2()
+
+    return aria2_client.tell_waiting(0, 1000)

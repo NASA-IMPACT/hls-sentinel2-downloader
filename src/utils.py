@@ -11,7 +11,7 @@ from colorama import Fore
 from pathlib import Path
 
 # import custom functions
-from models import granule, db
+from models import granule, db, db_connect, db_close
 from thread_manager import lock
 from log_manager import log
 from settings import DOWNLOADS_PATH, DEBUG, DOWNLOAD_DAY, LOCK_FILE, INCLUDE_TILES_FILE
@@ -94,12 +94,12 @@ def update_ignore_links_in_datebase():
         this is a one time use function to set ignore flag on tiles
     '''
     lock.acquire()
-    db.connect()
+    db_connect
     query = granule.update(ignore_file=True).where(
         granule.tileid.not_in(get_include_tiles_list()))
     print(query.sql())
     query.execute()
-    db.close()
+    db_close
     lock.release()
 
 

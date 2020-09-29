@@ -3,14 +3,15 @@ from json import dumps as json_dump
 from requests import get
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
-from thread_manager import lock
+from peewee import OperationalError
+
 
 # import internal functions
-from models import status, granule_count, granule, db
+from models import status, granule_count, granule, db, db_connect, db_close
 from utils import parse_size, convert_date, get_include_tiles_list
 from log_manager import log
 from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, SCIHUB_USERNAME, SCIHUB_PASSWORD, USE_SCIHUB_TO_FETCH_LINKS, DEBUG
-
+import thread_manager
 
 '''
 Product and Search URLs and API are constructed as per
@@ -104,20 +105,25 @@ def fetch_links(fetch_day):
 
     global status, granule_count, granule, db
 
-    lock.acquire()
-    db.connect()
+    thread_manager.lock.acquire()
+    db_connect()
     try:
         fetch_day_available_links = granule_count.get(
             granule_count.date == fetch_day).available_links
         fetch_day_fetched_links = granule_count.get(
             granule_count.date == fetch_day).fetched_links
+    except OperationalError as ops_err:
+        log(f'could not connect to the database: {str(ops_err)}', 'error')
+        if thread_manager.lock.locked_lock() == True:
+            thread_manager.lock.release()
+        return
     except:
         granule_count.create(date=fetch_day, available_links=0,
                              fetched_links=0, last_fetched_time=datetime.now())
         fetch_day_available_links = 0
         fetch_day_fetched_links = 0
-    db.close()
-    lock.release()
+    db_close()
+    thread_manager.lock.release()
 
     start_date = str(fetch_day) + 'T00:00:00Z'  # open search API format
     end_date = str(fetch_day) + 'T23:59:59Z'  # open search API format
@@ -168,14 +174,14 @@ def fetch_links(fetch_day):
             entries = feed['entry']
             fetched_entries = len(entries)
 
-            lock.acquire()
-            db.connect()
+            thread_manager.lock.acquire()
+            db_connect()
             granule_counter = granule_count.get(
                 granule_count.date == fetch_day)
             granule_counter.available_links = total_results
             granule_counter.save()
-            db.close()
-            lock.release()
+            db_close()
+            thread_manager.lock.release()
 
             try:
                 for entry in entries:
@@ -214,8 +220,8 @@ def fetch_links(fetch_day):
                     else:
                         ignore_file = True
 
-                    lock.acquire()
-                    db.connect()
+                    thread_manager.lock.acquire()
+                    db_connect()
 
                     # check and add only a new link in the database
                     try:
@@ -224,8 +230,8 @@ def fetch_links(fetch_day):
                     except Exception as e:
                         log(f'skipping {id} as it already exists in database', 'links')
 
-                    db.close()
-                    lock.release()
+                    db_close()
+                    thread_manager.lock.release()
 
             except TypeError as e:
                 log(f'Type error for entry object {str(entry)}', 'error')
@@ -233,17 +239,17 @@ def fetch_links(fetch_day):
             total_fetched_entries += fetched_entries
             params['start'] += fetched_entries
 
-            lock.acquire()
-            db.connect()
+            thread_manager.lock.acquire()
+            db_connect()
             last_linked_fetched_time = status.get(
                 status.key_name == 'last_linked_fetched_time')
             last_linked_fetched_time.value = str(datetime.now())
             last_linked_fetched_time.save()
-            db.close()
-            lock.release()
+            db_close()
+            thread_manager.lock.release()
 
-            lock.acquire()
-            db.connect()
+            thread_manager.lock.acquire()
+            db_connect
             try:
                 granule_counter = granule_count.get(
                     granule_count.date == fetch_day)
@@ -254,8 +260,8 @@ def fetch_links(fetch_day):
             except Exception as e:
                 log(f'error: {str(e)}, {filename}', 'error')
 
-            db.close()
-            lock.release()
+            db_close()
+            thread_manager.lock.release()
 
             if (total_fetched_entries >= total_results):
                 break
