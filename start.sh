@@ -6,5 +6,5 @@ if test -f "$FILE"; then
     pid=$(<$FILE)
     kill -9 $pid
 fi
-nohup python3 src/main.py > nohup.log 2>&1 &
+nohup python3 -u src/main.py > nohup.log 2>&1 &
 echo $! > $FILE

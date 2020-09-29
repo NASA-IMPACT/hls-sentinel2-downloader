@@ -85,7 +85,7 @@ def start_aria2():
     p = subprocess_Popen(
         [
             "aria2c",
-            "--enable-http-keep-alive=false",
+            "--enable-http-keep-alive=true",
             "--max-concurrent-downloads=15",
             "--max-connection-per-server=1",
             "--split=1",
