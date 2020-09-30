@@ -32,7 +32,9 @@ def handle_download_error(aria2, gid):
     # alternate way - gids[download.gid]
     url_failed = download.files[0].uris[0]['uri']
 
-    download_queue.put({"url": url_failed, "success": False})
+    download_queue.put({"url": url_failed, "success": False,
+                        "error_message": download.error_message})
+    log(f'{download.error_message} {url_failed}', 'error')
 
 
 def handle_download_complete(aria2, gid):

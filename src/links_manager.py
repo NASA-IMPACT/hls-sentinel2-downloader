@@ -1,10 +1,9 @@
 # import external packages
 from json import dumps as json_dump
-from requests import get
+from requests import get, ConnectionError
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 from peewee import OperationalError
-
 
 # import internal functions
 from models import status, granule_count, granule, db, db_connect, db_close
@@ -150,118 +149,125 @@ def fetch_links(fetch_day):
     # Continuously call the search API until all entries have been fetched.
     while True:
 
-        log(f'fetching {SEARCH_URL} with params {json_dump(params)}', 'links')
+        try:
+            log(f'fetching {SEARCH_URL} with params {json_dump(params)}', 'links')
 
-        response = get(SEARCH_URL, params, auth=AUTH)
+            response = get(SEARCH_URL, params, auth=AUTH)
 
-        log(f'fetched {SEARCH_URL} with status {response.status_code}', 'links')
+            log(f'fetched {SEARCH_URL} with status {response.status_code}', 'links')
 
-        if response.status_code == 200:
-            feed = response.json()['feed']
+            if response.status_code == 200:
+                feed = response.json()['feed']
 
-            if 'opensearch:totalResults' not in feed or 'entry' not in feed:
-                # Can happen when there's no result or all links are fetched
-                log(f'all links fetched for {fetch_day}', 'status')
-                log(f'all links fetched for {fetch_day}', 'links')
-                return
+                if 'opensearch:totalResults' not in feed or 'entry' not in feed:
+                    # Can happen when there's no result or all links are fetched
+                    log(f'all links fetched for {fetch_day}', 'status')
+                    log(f'all links fetched for {fetch_day}', 'links')
+                    return
 
-            total_results = int(feed['opensearch:totalResults'])
+                total_results = int(feed['opensearch:totalResults'])
 
-            if (fetch_day_available_links == total_results) and (fetch_day_fetched_links == total_results):
-                # ee.emit('links_fetched',fetch_day)
-                break
+                if (fetch_day_available_links == total_results) and (fetch_day_fetched_links == total_results):
+                    # ee.emit('links_fetched',fetch_day)
+                    break
 
-            entries = feed['entry']
-            fetched_entries = len(entries)
+                entries = feed['entry']
+                fetched_entries = len(entries)
 
-            thread_manager.lock.acquire()
-            db_connect()
-            granule_counter = granule_count.get(
-                granule_count.date == fetch_day)
-            granule_counter.available_links = total_results
-            granule_counter.save()
-            db_close()
-            thread_manager.lock.release()
-
-            try:
-                for entry in entries:
-                    id = entry['id']
-
-                    for d in entry['date']:
-                        if d['name'] == "beginposition":
-                            beginposition = convert_date(d['content'])
-                        elif d['name'] == "endposition":
-                            endposition = convert_date(d['content'])
-                        elif d['name'] == "ingestiondate":
-                            ingestiondate = convert_date(d['content'])
-
-                    for s in entry['str']:
-                        if s['name'] == "uuid":
-                            uuid = s['content']
-                        elif s['name'] == "size":
-                            size = parse_size(s['content'])
-                        elif s['name'] == "filename":
-                            filename = s['content']
-                        elif s['name'] == "tileid":
-                            tileid = s['content']
-
-                    #log(f'getting checksum for {id}','links')
-                    checksum = get_checksum(PRODUCT_URL.format(id))
-                    #log(f'got checksum {checksum} for {id}','links')
-
-                    download_url = get_download_link(PRODUCT_URL.format(id))
-
-                    if USE_SCIHUB_TO_FETCH_LINKS:
-                        download_url = download_url.replace(
-                            'scihub', 'inthub2')
-
-                    if(tileid in include_tiles):
-                        ignore_file = False
-                    else:
-                        ignore_file = True
-
-                    thread_manager.lock.acquire()
-                    db_connect()
-
-                    # check and add only a new link in the database
-                    try:
-                        granule_exists = granule.create(id=id, filename=filename, tileid=tileid, size=size, checksum=checksum, beginposition=beginposition, endposition=endposition,
-                                                        ingestiondate=ingestiondate, download_url=download_url, downloaded=False, in_progress=False, uploaded=False, ignore_file=ignore_file, retry=0)
-                    except Exception as e:
-                        log(f'skipping {id} as it already exists in database', 'links')
-
-                    db_close()
-                    thread_manager.lock.release()
-
-            except TypeError as e:
-                log(f'Type error for entry object {str(entry)}', 'error')
-
-            total_fetched_entries += fetched_entries
-            params['start'] += fetched_entries
-
-            thread_manager.lock.acquire()
-            db_connect()
-            last_linked_fetched_time = status.get(
-                status.key_name == 'last_linked_fetched_time')
-            last_linked_fetched_time.value = str(datetime.now())
-            last_linked_fetched_time.save()
-            db_close()
-            thread_manager.lock.release()
-
-            thread_manager.lock.acquire()
-            db_connect
-            try:
+                thread_manager.lock.acquire()
+                db_connect()
                 granule_counter = granule_count.get(
                     granule_count.date == fetch_day)
-                granule_counter.fetched_links = total_fetched_entries
-                granule_counter.last_fetched_time = datetime.now()
+                granule_counter.available_links = total_results
                 granule_counter.save()
-                log(f'{total_fetched_entries} links fetched for {fetch_day}', 'links')
-            except Exception as e:
-                log(f'error: {str(e)}, {filename}', 'error')
+                db_close()
+                thread_manager.lock.release()
 
-            db_close()
-            thread_manager.lock.release()
+                try:
+                    for entry in entries:
+                        id = entry['id']
 
-            if (total_fetched_entries >= total_results):
-                break
+                        for d in entry['date']:
+                            if d['name'] == "beginposition":
+                                beginposition = convert_date(d['content'])
+                            elif d['name'] == "endposition":
+                                endposition = convert_date(d['content'])
+                            elif d['name'] == "ingestiondate":
+                                ingestiondate = convert_date(d['content'])
+
+                        for s in entry['str']:
+                            if s['name'] == "uuid":
+                                uuid = s['content']
+                            elif s['name'] == "size":
+                                size = parse_size(s['content'])
+                            elif s['name'] == "filename":
+                                filename = s['content']
+                            elif s['name'] == "tileid":
+                                tileid = s['content']
+
+                        #log(f'getting checksum for {id}','links')
+                        checksum = get_checksum(PRODUCT_URL.format(id))
+                        #log(f'got checksum {checksum} for {id}','links')
+
+                        download_url = get_download_link(
+                            PRODUCT_URL.format(id))
+
+                        if USE_SCIHUB_TO_FETCH_LINKS:
+                            download_url = download_url.replace(
+                                'scihub', 'inthub2')
+
+                        if(tileid in include_tiles):
+                            ignore_file = False
+                        else:
+                            ignore_file = True
+
+                        thread_manager.lock.acquire()
+                        db_connect()
+
+                        # check and add only a new link in the database
+                        try:
+                            granule_exists = granule.create(id=id, filename=filename, tileid=tileid, size=size, checksum=checksum, beginposition=beginposition, endposition=endposition,
+                                                            ingestiondate=ingestiondate, download_url=download_url, downloaded=False, in_progress=False, uploaded=False, ignore_file=ignore_file, retry=0)
+                        except Exception as e:
+                            log(f'skipping {id} as it already exists in database', 'links')
+
+                        db_close()
+                        thread_manager.lock.release()
+
+                except TypeError as e:
+                    log(f'Type error for entry object {str(entry)}', 'error')
+
+                total_fetched_entries += fetched_entries
+                params['start'] += fetched_entries
+
+                thread_manager.lock.acquire()
+                db_connect()
+                last_linked_fetched_time = status.get(
+                    status.key_name == 'last_linked_fetched_time')
+                last_linked_fetched_time.value = str(datetime.now())
+                last_linked_fetched_time.save()
+                db_close()
+                thread_manager.lock.release()
+
+                thread_manager.lock.acquire()
+                db_connect
+                try:
+                    granule_counter = granule_count.get(
+                        granule_count.date == fetch_day)
+                    granule_counter.fetched_links = total_fetched_entries
+                    granule_counter.last_fetched_time = datetime.now()
+                    granule_counter.save()
+                    log(f'{total_fetched_entries} links fetched for {fetch_day}', 'links')
+                except Exception as e:
+                    log(f'{str(e)}, {filename}', 'error')
+
+                db_close()
+                thread_manager.lock.release()
+
+                if (total_fetched_entries >= total_results):
+                    break
+
+        except ConnectionError as conn_error:
+            log(f'Connection failed {str(conn_error)}', 'error')
+        except Exception as e:
+            log(f'Exception occurred during fetching links {str(e)}', 'error')

@@ -252,6 +252,7 @@ def download_file():
         put a file to download in aria2's queue by fetching a link from the database
     '''
     thread_manager.lock.acquire()
+    db_connect()
 
     global DOWNLOAD_DAY  # should be in format Y-m-d
 
@@ -279,8 +280,6 @@ def download_file():
 
     # download oldest available first
     query = query.order_by(granule.beginposition.asc())
-
-    db_connect()
 
     try:
 
@@ -321,11 +320,18 @@ def download_file():
 
         return
 
-    db_close()
-    thread_manager.lock.release()
+    # db_close()
+    # thread_manager.lock.release()
 
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
+
+    if path.exists(file_path):
+        remove_file(file_path)
+
+    '''
+    Following logic to check is file is already downloaded or not is disabled because of a potential bug
+    where count of waiting download didn't increase 
 
     # check if file is already downloaded with valid checksum in the downloads folder
     if path.exists(file_path):
@@ -333,7 +339,7 @@ def download_file():
         granule_downloaded_checksum = get_checksum_local(file_path)
         if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
             # checksum matched that means file is already downloaded
-            log(f"{str(datetime.now())}, found existing file in downloads dir = {filename}", "status")
+            log(f"found existing file in downloads dir = {filename}", "status")
             # upload only if upload_orphan_downloads_worker is not running
             if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
                 thread_manager.download_queue.put(
@@ -343,6 +349,7 @@ def download_file():
             if thread_manager.lock.locked_lock() == True:
                 thread_manager.lock.release()
             return
+    '''
 
     if is_active_url(granule_to_download.download_url):
         # file is already being downloaded
@@ -354,15 +361,15 @@ def download_file():
 
     # check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
-        thread_manager.lock.acquire()
-        db_connect()
+        # thread_manager.lock.acquire()
+        # db_connect()
         granule_to_download.retry = granule_to_download.retry + 1
         granule_to_download.in_progress = True
         granule_to_download.download_started = datetime.now()
         granule_to_download.save()
 
-        db_close()
-        thread_manager.lock.release()
+        # db_close()
+        # thread_manager.lock.release()
 
         download = add_download_url(granule_to_download.download_url)
 
@@ -371,12 +378,16 @@ def download_file():
     else:
         log(f"file already uploaded = {filename}", "status")
 
-        thread_manager.lock.acquire()
-        db_connect()
+        # thread_manager.lock.acquire()
+        # db_connect()
         granule_to_download.uploaded = True
         granule_to_download.download_failed = False
         granule_to_download.save()
-        db_close()
+        # db_close()
+        # thread_manager.lock.release()
+
+    db_close()
+    if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
 
@@ -430,13 +441,15 @@ def do_downloads_buffered():
     log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
     log(f"{get_memory_usage()}", "status")
 
-    while len(get_waiting_urls()) < (MAX_CONCURRENT_INTHUB_LIMIT + 100):
-        log(
-            f"adding a file in aria2c download queue, #active:{len(get_active_urls())},waiting:{len(get_waiting_urls())}", "status")
-        try:
-            download_file()
-        except Exception as e:
-            log(f"error during initiaing downloads:{str(e)}", "status")
+    if len(get_waiting_urls()) < (MAX_CONCURRENT_INTHUB_LIMIT + 100):
+        # add 25 links a time to aria2c's queue
+        for x in range(25):
+            log(
+                f"adding a file{x} in aria2c download queue, #active:{len(get_active_urls())},waiting:{len(get_waiting_urls())}", "status")
+            try:
+                download_file()
+            except Exception as e:
+                log(f"error during initiaing downloads:{str(e)}", "status")
 
 
 def do_downloads():
@@ -489,7 +502,8 @@ def check_queues():
             db_close()
             thread_manager.lock.release()
             thread_manager.error_count += 1
-            log(f'file aborted = {granule_failed.filename} ({failed_url})  retry={granule_failed.retry} attempts', 'error')
+            log(
+                f"file aborted = {granule_failed.filename} ({failed_url}) msg={item['error_message']}  retry={granule_failed.retry} attempts", 'error')
 
     # check the upload queue
     if not thread_manager.upload_queue.empty():
@@ -549,7 +563,7 @@ def init():
     clean_up_downloads()
 
     # expire older links
-    expire_links(days=-21)
+    expire_links(days=-15)
 
     # start the link fetcher
     check_link_fetcher()
@@ -563,14 +577,17 @@ def init():
     else:
         requeue_failed()
 
+    # start downloads
+    do_downloads_buffered()
+
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
     every(15).seconds.do(run_threaded, collect_metrics)
     every(15).minutes.do(s3_upload_logs)
     every(12).hours.do(run_threaded, check_link_fetcher)
-    every(24).hours.do(expire_links, days=-21)
+    every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(2).seconds.do(do_downloads_buffered)
+    every(1).minutes.do(do_downloads_buffered)
     every(180).minutes.do(requeue_failed)
 
     # start the scheduler
