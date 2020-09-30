@@ -577,7 +577,10 @@ def init():
     else:
         requeue_failed()
 
-    # start downloads
+    # upload old logs
+    s3_upload_logs()
+
+    # start initial downloads, later this is being done by a scheduler
     do_downloads_buffered()
 
     # create scheduled events
