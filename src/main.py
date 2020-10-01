@@ -13,7 +13,7 @@ from peewee import OperationalError
 
 # import custom functions
 from models import status,  granule, db,  db_connect, db_close
-from download_manager import add_download_url, get_active_urls, get_waiting_urls
+from download_manager import add_download_url, get_active_urls, get_waiting_urls, pause_download, resume_download
 from s3_uploader import s3_upload_file, s3_file_exists
 from utils import get_checksum_local, kill_downloader, clean_up_downloads, get_memory_usage, file_is_locked, get_folder_size, remove_file, get_download_folder_size
 from log_manager import log, s3_upload_logs
@@ -222,7 +222,7 @@ def requeue_failed(DOWNLOAD_DAY=None):
 
 def expire_links(days=None):
     '''
-        expire older links 
+        expire older links
     '''
 
     if days is None:
@@ -241,6 +241,65 @@ def expire_links(days=None):
         log(f'could not connect to the database: {str(ops_err)}', 'error')
 
     log(f"expiring links older than {days} days", "status")
+
+    db_close()
+    if thread_manager.lock.locked_lock() == True:
+        thread_manager.lock.release()
+
+
+def queue_files(file_limit=10000):
+    '''
+        put a file to download in aria2's queue by fetching a link from the database
+    '''
+    thread_manager.lock.acquire()
+    db_connect()
+
+    global DOWNLOAD_DAY  # should be in format Y-m-d
+
+    try:
+        query = (
+            granule.select()
+            .where(granule.ignore_file == False)
+            .where(granule.downloaded == False)
+            .where(granule.in_progress == False)
+            .where(granule.uploaded == False)
+            .where(granule.download_failed == False)
+            .where(granule.expired == False)
+            .where(granule.retry < 160)
+            .limit(file_limit)
+        ).order_by(granule.beginposition.asc())  # download oldest available first
+        '''
+                Note: if a failed granule is retried 160 times every 3 hours, we will keep retrying it for 21 days.
+                However we need to be careful otherwise we may mark to ignore all files during the IntHub downtime
+        '''
+
+        pause_download()
+        log(f"attempting to add {file_limit} files in the download queue", "status")
+
+        count = 0
+        for grn in query:
+            grn.retry = grn.retry + 1
+            grn.in_progress = True
+            grn.download_started = datetime.now()
+            grn.save()
+            add_download_url(grn.download_url)
+            count = count + 1
+
+        log(f"{count} files added in the download queue", "status")
+        resume_download()
+
+    except OperationalError as ops_err:
+        log(f'could not connect to the database: {str(ops_err)}', 'error')
+        if thread_manager.lock.locked_lock() == True:
+            thread_manager.lock.release()
+        return
+    except Exception as e:
+        log(f"Error queueing files {str(e)}", "status")
+        db_close()
+        if thread_manager.lock.locked_lock() == True:
+            thread_manager.lock.release()
+
+        return
 
     db_close()
     if thread_manager.lock.locked_lock() == True:
@@ -266,10 +325,9 @@ def download_file():
         .where(granule.expired == False)
         .where(granule.retry < 160)
     )
-
     '''
             Note: if a failed granule is retried 160 times every 3 hours, we will keep retrying it for 21 days.
-            However we need to be careful otherwise we may mark to ignore all files during the IntHub downtime 
+            However we need to be careful otherwise we may mark to ignore all files during the IntHub downtime
     '''
 
     if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
@@ -291,7 +349,6 @@ def download_file():
                 log(f'{granule_to_download_count} left to download for {DOWNLOAD_DAY}', "status")
             else:
                 # when all the files for given day are downloaded, set download day to oldest available day
-                # TODO: add logic to not download files older than 21 days
                 granule_to_download_time = granule_to_download.beginposition.strftime(
                     "%Y-%m-%d")
                 DOWNLOAD_DAY = granule_to_download_time
@@ -320,9 +377,6 @@ def download_file():
 
         return
 
-    # db_close()
-    # thread_manager.lock.release()
-
     filename = granule_to_download.filename.replace("SAFE", "zip")
     file_path = f"{DOWNLOADS_PATH}/{filename}"
 
@@ -331,7 +385,7 @@ def download_file():
 
     '''
     Following logic to check is file is already downloaded or not is disabled because of a potential bug
-    where count of waiting download didn't increase 
+    where count of waiting download didn't increase
 
     # check if file is already downloaded with valid checksum in the downloads folder
     if path.exists(file_path):
@@ -361,15 +415,10 @@ def download_file():
 
     # check if file is already uploaded to S3
     if not s3_file_exists(filename, granule_to_download.beginposition):
-        # thread_manager.lock.acquire()
-        # db_connect()
         granule_to_download.retry = granule_to_download.retry + 1
         granule_to_download.in_progress = True
         granule_to_download.download_started = datetime.now()
         granule_to_download.save()
-
-        # db_close()
-        # thread_manager.lock.release()
 
         download = add_download_url(granule_to_download.download_url)
 
@@ -377,14 +426,9 @@ def download_file():
 
     else:
         log(f"file already uploaded = {filename}", "status")
-
-        # thread_manager.lock.acquire()
-        # db_connect()
         granule_to_download.uploaded = True
         granule_to_download.download_failed = False
         granule_to_download.save()
-        # db_close()
-        # thread_manager.lock.release()
 
     db_close()
     if thread_manager.lock.locked_lock() == True:
@@ -408,7 +452,7 @@ def is_active_url(url):
 def upload_orphan_downloads():
     '''
         check downloads folder to upload files those were downloaded 2 hrs ago did not get not uploaded
-        this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and 
+        this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and
         download folder was getting filled up pretty fast
     '''
     log('checking downloads folder for orphan files that were downloaded but not uploaded', 'status')
@@ -438,9 +482,6 @@ def do_downloads_buffered():
     '''
     global download_file_worker
 
-    log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
-    log(f"{get_memory_usage()}", "status")
-
     if len(get_waiting_urls()) < (MAX_CONCURRENT_INTHUB_LIMIT + 100):
         # add 25 links a time to aria2c's queue
         for x in range(25):
@@ -457,9 +498,6 @@ def do_downloads():
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
     '''
     global download_file_worker
-
-    log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #Upload Queue = {thread_manager.upload_queue.qsize()}, #Download Queue = {thread_manager.download_queue.qsize()}, Downloads Size = {get_download_folder_size()} GB", "status")
-    log(f"{get_memory_usage()}", "status")
 
     # if link fetcher is running reduce maximum concurrent downloads by 1, max limit is 15
     if USE_SCIHUB_TO_FETCH_LINKS or (fetch_links_worker is None or fetch_links_worker.isAlive() == False):
@@ -481,6 +519,10 @@ def check_queues():
     '''
         check both downloaded or uploaded files queue, perform upload and clean up
     '''
+
+    log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
+    log(f"{get_memory_usage()}", "status")
+
     # check download queue
     if not thread_manager.download_queue.empty():
         item = thread_manager.download_queue.get()
@@ -577,11 +619,11 @@ def init():
     else:
         requeue_failed()
 
-    # upload old logs
-    s3_upload_logs()
+    queue_files()
+    # exit(0)
 
     # start initial downloads, later this is being done by a scheduler
-    do_downloads_buffered()
+    # do_downloads_buffered()
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
@@ -590,7 +632,8 @@ def init():
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(1).minutes.do(do_downloads_buffered)
+    # every(1).minutes.do(do_downloads_buffered)
+    every(24).hours.do(queue_files)
     every(180).minutes.do(requeue_failed)
 
     # start the scheduler

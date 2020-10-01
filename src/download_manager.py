@@ -94,6 +94,7 @@ def start_aria2():
     p = subprocess_Popen(
         [
             "aria2c",
+            "--retry-wait=5",
             "--enable-http-keep-alive=true",
             f"--max-concurrent-downloads={max_downloads}",
             "--max-connection-per-server=1",
@@ -161,4 +162,29 @@ def get_waiting_urls():
     if aria2 is None or aria2_client is None:
         init_aria2()
 
-    return aria2_client.tell_waiting(0, 1000)
+    # 1000000 is just a large number
+    return aria2_client.tell_waiting(0, 1000000)
+
+
+def pause_download():
+    '''
+        pause download
+    '''
+    global aria2
+
+    if aria2 is None or aria2_client is None:
+        init_aria2()
+
+    return aria2_client.pause_all()
+
+
+def resume_download():
+    '''
+        resume download
+    '''
+    global aria2
+
+    if aria2 is None or aria2_client is None:
+        init_aria2()
+
+    return aria2_client.unpause_all(()
