@@ -619,8 +619,7 @@ def init():
     else:
         requeue_failed()
 
-    queue_files()
-    # exit(0)
+    queue_files()  # <--- this is a new alternative methods to do_downloads_buffered
 
     # start initial downloads, later this is being done by a scheduler
     # do_downloads_buffered()
