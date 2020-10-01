@@ -187,4 +187,4 @@ def resume_download():
     if aria2 is None or aria2_client is None:
         init_aria2()
 
-    return aria2_client.unpause_all(()
+    return aria2_client.unpause_all()
