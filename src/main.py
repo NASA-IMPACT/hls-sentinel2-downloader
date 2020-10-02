@@ -605,7 +605,7 @@ def init():
     clean_up_downloads()
 
     # expire older links
-    expire_links(days=-15)
+    expire_links(days=-3)
 
     # start the link fetcher
     check_link_fetcher()
@@ -632,7 +632,7 @@ def init():
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     # every(1).minutes.do(do_downloads_buffered)
-    every(24).hours.do(queue_files)
+    every(19).hours.do(queue_files)
     every(180).minutes.do(requeue_failed)
 
     # start the scheduler
