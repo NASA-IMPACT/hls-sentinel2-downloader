@@ -149,9 +149,10 @@ def upload_file(file_path):
         remove_file(file_path)
 
 
-def requeue_failed(DOWNLOAD_DAY=None):
+def requeue_failed(DOWNLOAD_DAY=None, reset_all=False):
     '''
         requeue the failed downloads by resetting flags in the database
+        reset_all resets all the files and should be used at the start of the downloader
     '''
     try:
 
@@ -198,12 +199,14 @@ def requeue_failed(DOWNLOAD_DAY=None):
             granule.update(in_progress=False, downloaded=False, download_failed=False,
                            uploaded=False).where(granule.download_failed == True).execute()
 
-            # reset failed uploads
-            granule.update(in_progress=False, downloaded=False, download_failed=False).where(
-                granule.uploaded == False).execute()
+            if reset_all == True:
 
-            # reset all in progress flags
-            granule.update(in_progress=False).execute()
+                # reset failed uploads
+                granule.update(in_progress=False, downloaded=False, download_failed=False).where(
+                    granule.uploaded == False).execute()
+
+                # reset all in progress flags
+                granule.update(in_progress=False).execute()
 
             log(f"resetting flags to download all remaining files", "status")
             db_close()
@@ -266,7 +269,7 @@ def queue_files(file_limit=10000):
             .where(granule.download_failed == False)
             .where(granule.expired == False)
             .where(granule.retry < 160)
-            .limit(file_limit)
+            # .limit(file_limit)
         ).order_by(granule.beginposition.asc())  # download oldest available first
         '''
                 Note: if a failed granule is retried 160 times every 3 hours, we will keep retrying it for 21 days.
@@ -278,12 +281,22 @@ def queue_files(file_limit=10000):
 
         count = 0
         for grn in query:
-            grn.retry = grn.retry + 1
-            grn.in_progress = True
-            grn.download_started = datetime.now()
-            grn.save()
-            add_download_url(grn.download_url)
-            count = count + 1
+            filename = grn.filename.replace("SAFE", "zip")
+            # check if file is already uploaded to S3
+            if not s3_file_exists(filename, grn.beginposition):
+                grn.retry = grn.retry + 1
+                grn.in_progress = True
+                grn.download_started = datetime.now()
+                grn.save()
+                add_download_url(grn.download_url)
+                count = count + 1
+                if (count >= file_limit) == True:
+                    break
+            else:
+                log(f"file was already uploaded = {filename}", "status")
+                grn.uploaded = True
+                grn.download_failed = False
+                grn.save()
 
         log(f"{count} files added in the download queue", "status")
         resume_download()
@@ -605,7 +618,7 @@ def init():
     clean_up_downloads()
 
     # expire older links
-    expire_links(days=-3)
+    expire_links(days=-4)
 
     # start the link fetcher
     check_link_fetcher()
@@ -617,7 +630,7 @@ def init():
     if DOWNLOAD_BY_DAY and not DOWNLOAD_DAY is None:
         requeue_failed(DOWNLOAD_DAY)
     else:
-        requeue_failed()
+        requeue_failed(None, True)
 
     queue_files()  # <--- this is a new alternative methods to do_downloads_buffered
 
