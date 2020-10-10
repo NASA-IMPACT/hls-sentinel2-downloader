@@ -251,6 +251,11 @@ def expire_links(days=None):
 
 
 def queue_files(file_limit=10000):
+
+    # if there are more than 1000 waiting download, don't queue additional files
+    if len(get_waiting_urls()) > 1000:
+        return
+
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
@@ -532,9 +537,11 @@ def check_queues():
     '''
         check both downloaded or uploaded files queue, perform upload and clean up
     '''
-
-    log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
-    log(f"{get_memory_usage()}", "status")
+    try:
+        log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
+        log(f"{get_memory_usage()}", "status")
+    except Exception as e:
+        log(f"could not get status from aria2c:{str(e)}", "status")
 
     # check download queue
     if not thread_manager.download_queue.empty():
@@ -645,7 +652,7 @@ def init():
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     # every(1).minutes.do(do_downloads_buffered)
-    every(19).hours.do(queue_files)
+    every(1).hours.do(queue_files)  # preivous value = 19
     every(180).minutes.do(requeue_failed)
 
     # start the scheduler

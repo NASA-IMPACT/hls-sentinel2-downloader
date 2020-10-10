@@ -59,6 +59,9 @@ def log(msg, type):
     # TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
     # TODO make sure nohup output and status log have same content
 
+    if type == 'error':
+        msg=f'Error:{msg}'
+
     log_msg = f'{str(datetime.now())}, {msg}'
 
     if type == 'status':
@@ -73,6 +76,7 @@ def log(msg, type):
         # log error to both status and error loggers
         status_logger.info(log_msg)
         error_logger.info(log_msg)
+    
 
     if DEBUG and type == 'status':
         print(log_msg)
@@ -85,6 +89,7 @@ def s3_upload_logs():
         upload logs to S3
     '''
 
+    log(f'uploading logs', 'status')
     global transfer_config
 
     now = datetime.now()
@@ -110,6 +115,6 @@ def s3_upload_logs():
             try:
                 s3_client.upload_file(
                     f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
-                log(f'log file {LOGS_PATH}/{item} uploaded to {S3_LOG_BUCKET}/{key}', 'status')
+
             except Exception as e:
                 log(f'error during uploading logs: {str(e)}', 'error')
