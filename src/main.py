@@ -256,6 +256,8 @@ def queue_files(file_limit=10000):
     if len(get_waiting_urls()) > 1000:
         return
 
+    requeue_failed()
+
     '''
         put a file to download in aria2's queue by fetching a link from the database
     '''
@@ -653,7 +655,7 @@ def init():
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
     # every(1).minutes.do(do_downloads_buffered)
     every(1).hours.do(queue_files)  # preivous value = 19
-    every(180).minutes.do(requeue_failed)
+    # every(180).minutes.do(requeue_failed)
 
     # start the scheduler
     while True:
