@@ -222,7 +222,6 @@ def requeue_failed(DOWNLOAD_DAY=None, reset_all=False):
         log(f"failed resettting download failed flag", "error")
         return False
 
-
 def expire_links(days=None):
     '''
         expire older links
@@ -249,7 +248,6 @@ def expire_links(days=None):
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
-
 def queue_files(file_limit=10000):
 
     # if there are more than 1000 waiting download, don't queue additional files
@@ -275,15 +273,14 @@ def queue_files(file_limit=10000):
             .where(granule.uploaded == False)
             .where(granule.download_failed == False)
             .where(granule.expired == False)
-            .where(granule.retry < 160)
+            .where(granule.retry < 100) #give 100 tries to each file
             # .limit(file_limit)
         ).order_by(granule.beginposition.asc())  # download oldest available first
-        '''
-                Note: if a failed granule is retried 160 times every 3 hours, we will keep retrying it for 21 days.
-                However we need to be careful otherwise we may mark to ignore all files during the IntHub downtime
-        '''
+       
 
         pause_download()
+        
+        log(f"found {query.count()} from the database that can be downloaded", "status")
         log(f"attempting to add {file_limit} files in the download queue", "status")
 
         count = 0
@@ -325,10 +322,46 @@ def queue_files(file_limit=10000):
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
+def is_active_url(url):
+    '''
+        check if already an active url in aria2's download queue
+    '''
+    active_urls = get_active_urls()
+    for item in active_urls:
+        for file in item['files']:
+            for uri in file['uris']:
+                if uri['uri'].lower() == url.lower():
+                    return True
+
+    return False
+
+def upload_orphan_downloads():
+    '''
+        check downloads folder to upload files those were downloaded 2 hrs ago did not get not uploaded
+        this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and
+        download folder was getting filled up pretty fast
+    '''
+    log('checking downloads folder for orphan files that were downloaded but not uploaded', 'status')
+
+    all_zip_files = filter(lambda x: x.endswith('.zip'),
+                           listdir(DOWNLOADS_PATH))
+
+    now = datetime.now()
+    for f in all_zip_files:
+        file_path = f'{DOWNLOADS_PATH}/{f}'
+        try:
+            modify_date = datetime.fromtimestamp(path.getmtime(file_path))
+            modify_date_2hr_ago = now + timedelta(hours=-2)
+            if modify_date < modify_date_2hr_ago:
+                log(f'uploading {file_path} with time {modify_date}', 'status')
+                upload_file(file_path)
+        except Exception as e:
+            log(f'error during running orphan file checker {str(e)}', 'error')
 
 def download_file():
     '''
         put a file to download in aria2's queue by fetching a link from the database
+        Note: this function is currently NOT being used - it contains an older logic to download files
     '''
     thread_manager.lock.acquire()
     db_connect()
@@ -403,28 +436,6 @@ def download_file():
     if path.exists(file_path):
         remove_file(file_path)
 
-    '''
-    Following logic to check is file is already downloaded or not is disabled because of a potential bug
-    where count of waiting download didn't increase
-
-    # check if file is already downloaded with valid checksum in the downloads folder
-    if path.exists(file_path):
-        granule_expected_checksum = granule_to_download.checksum
-        granule_downloaded_checksum = get_checksum_local(file_path)
-        if granule_downloaded_checksum.upper() == granule_expected_checksum.upper():
-            # checksum matched that means file is already downloaded
-            log(f"found existing file in downloads dir = {filename}", "status")
-            # upload only if upload_orphan_downloads_worker is not running
-            if upload_orphan_downloads_worker == None or upload_orphan_downloads_worker.isAlive() == False:
-                thread_manager.download_queue.put(
-                    {"file_path": file_path, "success": True})
-
-            db_close()  # close if open
-            if thread_manager.lock.locked_lock() == True:
-                thread_manager.lock.release()
-            return
-    '''
-
     if is_active_url(granule_to_download.download_url):
         # file is already being downloaded
         log(f"file {granule_to_download.download_url} is already in download queue", "status")
@@ -454,68 +465,10 @@ def download_file():
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
-
-def is_active_url(url):
-    '''
-        check if already an active url in aria2's download queue
-    '''
-    active_urls = get_active_urls()
-    for item in active_urls:
-        for file in item['files']:
-            for uri in file['uris']:
-                if uri['uri'].lower() == url.lower():
-                    return True
-
-    return False
-
-
-def upload_orphan_downloads():
-    '''
-        check downloads folder to upload files those were downloaded 2 hrs ago did not get not uploaded
-        this shoudn't really happen but found that sometimes downloaded event from aria2 was missed and
-        download folder was getting filled up pretty fast
-    '''
-    log('checking downloads folder for orphan files that were downloaded but not uploaded', 'status')
-
-    all_zip_files = filter(lambda x: x.endswith('.zip'),
-                           listdir(DOWNLOADS_PATH))
-
-    now = datetime.now()
-    for f in all_zip_files:
-        file_path = f'{DOWNLOADS_PATH}/{f}'
-        try:
-            modify_date = datetime.fromtimestamp(path.getmtime(file_path))
-            modify_date_2hr_ago = now + timedelta(hours=-2)
-            if modify_date < modify_date_2hr_ago:
-                log(f'uploading {file_path} with time {modify_date}', 'status')
-                upload_file(file_path)
-        except Exception as e:
-            log(f'error during running orphan file checker {str(e)}', 'error')
-
-
-def do_downloads_buffered():
-    '''
-        There is a limit of number of concurrent downloads as set by MAX_CONCURRENT_INTHUB_LIMIT
-        MAX_CONCURRENT_INTHUB_LIMIT is passed to aria2c in download_manager.py file.
-
-        Here we add more than MAX_CONCURRENT_INTHUB_LIMIT files in aria2c buffer/queue so that it never runs out of files to download
-    '''
-    global download_file_worker
-
-    if len(get_waiting_urls()) < (MAX_CONCURRENT_INTHUB_LIMIT + 100):
-        # add 25 links a time to aria2c's queue
-        for x in range(25):
-            log(
-                f"adding a file{x} in aria2c download queue, #active:{len(get_active_urls())},waiting:{len(get_waiting_urls())}", "status")
-            try:
-                download_file()
-            except Exception as e:
-                log(f"error during initiaing downloads:{str(e)}", "status")
-
-
 def do_downloads():
     '''
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
+        Note: this function is currently NOT being used - it contains an older logic to download files
     '''
     global download_file_worker
 
@@ -533,7 +486,6 @@ def do_downloads():
                 download_file_worker.start()
         except Exception as e:
             log(f"error during initiaing downloads:{str(e)}", "status")
-
 
 def check_queues():
     '''
@@ -612,11 +564,9 @@ def check_queues():
 
         remove_file(file_path)
 
-
 def run_threaded(job_func):
     job_thread = thread_manager.Thread(target=job_func)
     job_thread.start()
-
 
 def init():
     '''
@@ -641,10 +591,8 @@ def init():
     else:
         requeue_failed(None, True)
 
-    queue_files()  # <--- this is a new alternative methods to do_downloads_buffered
-
     # start initial downloads, later this is being done by a scheduler
-    # do_downloads_buffered()
+    queue_files()  
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
@@ -653,15 +601,13 @@ def init():
     every(12).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    # every(1).minutes.do(do_downloads_buffered)
-    every(1).hours.do(queue_files)  # preivous value = 19
-    # every(180).minutes.do(requeue_failed)
+    every(1).hour.do(queue_files)  
+    # every(180).minutes.do(requeue_failed) #<-- it is now being called during queue_files 
 
     # start the scheduler
     while True:
         run_pending()
         sleep(1)
-
 
 # check if any previous instance is already running
 if file_is_locked():
