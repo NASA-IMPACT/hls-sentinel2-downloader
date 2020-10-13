@@ -19,37 +19,44 @@ def handle_download_start(aria2, gid):
     '''
         aria2 download start event handler
     '''
-    download = aria2.get_download(gid)
-    pass
+    try:
+        download = aria2.get_download(gid)
+    except Exception as e:
+        log(f"failed getting download status from aria2c:{str(e)}", "error")
 
 
 def handle_download_error(aria2, gid):
     '''
         aria2 download failed event handler
     '''
-    download = aria2.get_download(gid)
+    try:
+        download = aria2.get_download(gid)
 
-    # alternate way - gids[download.gid]
-    url_failed = download.files[0].uris[0]['uri']
+        # alternate way - gids[download.gid]
+        url_failed = download.files[0].uris[0]['uri']
 
-    download_queue.put({"url": url_failed, "success": False,
-                        "error_message": download.error_message})
-    log(f'{download.error_message} {url_failed}', 'error')
+        download_queue.put({"url": url_failed, "success": False,
+                            "error_message": download.error_message})
+        log(f'{download.error_message} {url_failed}', 'error')
+    except Exception as e:
+        log(f"failed getting download status from aria2c:{str(e)}", "error")
 
 
 def handle_download_complete(aria2, gid):
     '''
         aria2 download complete event handler
     '''
-    download = aria2.get_download(gid)
+    try:
+        download = aria2.get_download(gid)
 
-    file_path = str(download.root_files_paths[0])
+        file_path = str(download.root_files_paths[0])
 
-    download_queue.put({"file_path": file_path, "success": True})
+        download_queue.put({"file_path": file_path, "success": True})
 
-    log(
-        f"download complete event occured from aria2 for {file_path}", "status")
-
+        log(
+            f"download complete event occured from aria2 for {file_path}", "status")
+    except Exception as e:
+        log(f"failed getting download status from aria2c:{str(e)}", "error")
 
 def aria2_add_listeners():
     '''
@@ -149,8 +156,11 @@ def get_active_urls():
 
     if aria2 is None or aria2_client is None:
         init_aria2()
-
-    return aria2_client.tell_active()
+    
+    try:
+        return aria2_client.tell_active()
+    except Exception as e:
+        log(f"failed getting download status from aria2c:{str(e)}", "error")
 
 
 def get_waiting_urls():
