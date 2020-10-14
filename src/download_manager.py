@@ -22,7 +22,7 @@ def handle_download_start(aria2, gid):
     try:
         download = aria2.get_download(gid)
     except Exception as e:
-        log(f"failed getting download status from aria2c:{str(e)}", "error")
+        log(f"failed getting download status from aria2c", "error")
 
 
 def handle_download_error(aria2, gid):
@@ -39,7 +39,7 @@ def handle_download_error(aria2, gid):
                             "error_message": download.error_message})
         log(f'{download.error_message} {url_failed}', 'error')
     except Exception as e:
-        log(f"failed getting download status from aria2c:{str(e)}", "error")
+        log(f"failed getting download status from aria2c", "error")
 
 
 def handle_download_complete(aria2, gid):
@@ -56,7 +56,7 @@ def handle_download_complete(aria2, gid):
         log(
             f"download complete event occured from aria2 for {file_path}", "status")
     except Exception as e:
-        log(f"failed getting download status from aria2c:{str(e)}", "error")
+        log(f"failed getting download status from aria2c", "error")
 
 def aria2_add_listeners():
     '''
@@ -144,8 +144,11 @@ def add_download_url(url):
     if aria2 is None:
         init_aria2()
 
-    download = aria2.add_uris([url])
-    return download
+    try:
+        download = aria2.add_uris([url])
+        return download
+    except Exception as e:
+        log(f"failed getting download status from aria2c", "error")
 
 
 def get_active_urls():
@@ -160,7 +163,7 @@ def get_active_urls():
     try:
         return aria2_client.tell_active()
     except Exception as e:
-        log(f"failed getting download status from aria2c:{str(e)}", "error")
+        log(f"failed getting download status from aria2c", "error")
 
 
 def get_waiting_urls():
@@ -172,8 +175,11 @@ def get_waiting_urls():
     if aria2 is None or aria2_client is None:
         init_aria2()
 
-    # 1000000 is just a large number
-    return aria2_client.tell_waiting(0, 1000000)
+    try:
+        # 1000000 is just a large number
+        return aria2_client.tell_waiting(0, 1000000)
+    except Exception as e:
+        log(f"failed getting download status from aria2c", "error")
 
 
 def pause_download():
