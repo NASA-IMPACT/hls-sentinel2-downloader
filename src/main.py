@@ -598,11 +598,10 @@ def init():
     every(1).seconds.do(run_threaded, check_queues)
     every(15).seconds.do(run_threaded, collect_metrics)
     every(15).minutes.do(s3_upload_logs)
-    every(12).hours.do(run_threaded, check_link_fetcher)
+    every(4).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(1).hour.do(queue_files)  
-    # every(180).minutes.do(requeue_failed) #<-- it is now being called during queue_files 
+    every(5).minutes.do(queue_files)  
 
     # start the scheduler
     while True:
