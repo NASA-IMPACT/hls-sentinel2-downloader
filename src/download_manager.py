@@ -6,7 +6,7 @@ from datetime import datetime
 import aria2p
 
 # import internal functions
-from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, DEBUG, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS
+from settings import COPERNICUS_USERNAME, COPERNICUS_PASSWORD, DOWNLOADS_PATH, LOGS_PATH, RPC_SECRET, DEBUG, MAX_CONCURRENT_INTHUB_LIMIT, USE_SCIHUB_TO_FETCH_LINKS
 from log_manager import log
 from thread_manager import download_queue
 
@@ -109,6 +109,9 @@ def start_aria2():
             f"--http-user={COPERNICUS_USERNAME}",
             f"--http-passwd={COPERNICUS_PASSWORD}",
             "--enable-rpc",
+            f"--rpc-secret={RPC_SECRET}",
+            f"--log={LOGS_PATH}/aria2c.log",
+            "--log-level=debug",
             "--rpc-listen-all",
             f"--dir={DOWNLOADS_PATH}",
             "--allow-overwrite=true",
@@ -130,7 +133,7 @@ def init_aria2():
         sleep(2)
 
     aria2_client = aria2p.Client(
-        host="http://localhost", port=6800, secret="",)
+        host="http://localhost", port=6800, secret=f"{RPC_SECRET}",)
     aria2 = aria2p.API(aria2_client)
     aria2_add_listeners()
 

@@ -250,8 +250,12 @@ def expire_links(days=None):
 
 def queue_files(file_limit=10000):
 
-    # if there are more than 1000 waiting download, don't queue additional files
-    if len(get_waiting_urls()) > 1000:
+    try:
+        # if there are more than 1000 waiting download, don't queue additional files
+        if len(get_waiting_urls()) > 1000:
+            return
+    except Exception as e:
+        log(f"failed getting waiting urls count", "error")
         return
 
     requeue_failed()
@@ -495,7 +499,7 @@ def check_queues():
         log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
         log(f"{get_memory_usage()}", "status")
     except Exception as e:
-        log(f"could not get status from aria2c:{str(e)}", "status")
+        log(f"could not get status from aria2c", "error")
 
     # check download queue
     if not thread_manager.download_queue.empty():
@@ -601,7 +605,7 @@ def init():
     every(4).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(5).minutes.do(queue_files)  
+    every(5).hours.do(queue_files)  
 
     # start the scheduler
     while True:
