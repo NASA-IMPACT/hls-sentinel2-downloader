@@ -89,7 +89,7 @@ def s3_upload_logs():
         upload logs to S3
     '''
 
-    log(f'uploading logs', 'status')
+    log(f'starting uploading logs', 'status')
     global transfer_config
 
     now = datetime.now()
@@ -118,3 +118,5 @@ def s3_upload_logs():
 
             except Exception as e:
                 log(f'error during uploading logs: {str(e)}', 'error')
+
+    log(f'finished uploading logs', 'status')

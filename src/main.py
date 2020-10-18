@@ -601,7 +601,7 @@ def init():
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
     every(15).seconds.do(run_threaded, collect_metrics)
-    every(15).minutes.do(s3_upload_logs)
+    every(15).minutes.do(run_threaded, s3_upload_logs)
     every(4).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
