@@ -122,7 +122,7 @@ def remove_file(file_path):
         log(f'removing file {file_path}', 'status')
         remove(file_path)
     except Exception as e:
-        log(f'error: cannot remove {file_path} {str(e)}', 'error')
+        log(f'Cannot remove {file_path} {str(e)}', 'error')
 
 
 def clean_up_downloads():
@@ -167,6 +167,6 @@ def get_folder_size(p):
             '**/*') if f.is_file())
     except Exception as e:
         size = -1
-        log(f'error during getting folder size {str(e)}', 'error')
+        log(f'Cannot get folder size {str(e)}', 'error')
 
     return size

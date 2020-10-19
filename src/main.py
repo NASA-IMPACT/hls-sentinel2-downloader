@@ -10,6 +10,7 @@ from termcolor import colored
 from schedule import every, run_pending
 from re import search
 from peewee import OperationalError
+from glob import glob
 
 # import custom functions
 from models import status,  granule, db,  db_connect, db_close
@@ -209,6 +210,7 @@ def requeue_failed(DOWNLOAD_DAY=None, reset_all=False):
                 granule.update(in_progress=False).execute()
 
             log(f"resetting flags to download all remaining files", "status")
+
             db_close()
             thread_manager.lock.release()
             return True
@@ -496,7 +498,7 @@ def check_queues():
         check both downloaded or uploaded files queue, perform upload and clean up
     '''
     try:
-        log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB", "status")
+        log(f"#threads = {thread_manager.active_count()}, #downloads in progress = {len(get_active_urls())}, #downloads waiting = {len(get_waiting_urls())}, Downloads Size = {get_download_folder_size()} GB, #Download Queue={thread_manager.download_queue.qsize()}, #Upload Queue={thread_manager.upload_queue.qsize()}", "status")
         log(f"{get_memory_usage()}", "status")
     except Exception as e:
         log(f"could not get status from aria2c", "error")
@@ -569,8 +571,21 @@ def check_queues():
         remove_file(file_path)
 
 def run_threaded(job_func):
+    '''
+        Helper function to run a job on a thread
+    '''
     job_thread = thread_manager.Thread(target=job_func)
     job_thread.start()
+
+def upload_existing_files():
+    '''
+       This function can be used to upload files which are downloaded but got intrupted 
+       Note: this is currently not in use
+    '''
+    files = glob(f'{DOWNLOADS_PATH}/*.zip')
+    for f in files:
+        upload_file(f)
+       
 
 def init():
     '''
@@ -596,7 +611,7 @@ def init():
         requeue_failed(None, True)
 
     # start initial downloads, later this is being done by a scheduler
-    queue_files()  
+    queue_files(15)  
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)

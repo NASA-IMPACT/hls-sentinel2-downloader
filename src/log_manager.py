@@ -53,11 +53,6 @@ def log(msg, type):
     '''
         based on type decide the log format
     '''
-    # TODO add print statement here
-    # TODO figure out way to capture nohup output
-    # TODO add error logs to status logs as well?
-    # TODO limit nohup log size https://serverfault.com/questions/623247/how-to-rotate-nohup-out-file-without-killing-my-application
-    # TODO make sure nohup output and status log have same content
 
     if type == 'error':
         msg=f'Error:{msg}'
@@ -89,34 +84,34 @@ def s3_upload_logs():
         upload logs to S3
     '''
 
-    log(f'starting uploading logs', 'status')
+    log(f'starting logs upload', 'status')
     global transfer_config
 
     now = datetime.now()
     for (root, dirs, files) in walk(LOGS_PATH):
         for item in files:
-            # upload logs which were modifed in last 30 minutes
 
-            #modify_date = datetime.fromtimestamp(path.getmtime(f'{LOGS_PATH}/{item}'))
-            #modify_date_30minutes_ago = now + timedelta(minutes=-30)
+            # upload logs which were modifed in last 60 minutes
+            modify_date = datetime.fromtimestamp(path.getmtime(f'{LOGS_PATH}/{item}'))
+            modify_date_30minutes_ago = now + timedelta(minutes=-60)
 
-            # if modify_date > modify_date_30minutes_ago:
-            if 'status' in item:
-                key = f'status/{item}'
-            elif 'links' in item:
-                key = f'links/{item}'
-            elif 'downloads' in item:
-                key = f'downloads/{item}'
-            elif 'metrics' in item:
-                key = f'metrics/{item}'
-            elif 'error' in item:
-                key = f'error/{item}'
+            if modify_date >= modify_date_30minutes_ago:
+                if 'status' in item:
+                    key = f'status/{item}'
+                elif 'links' in item:
+                    key = f'links/{item}'
+                elif 'downloads' in item:
+                    key = f'downloads/{item}'
+                elif 'metrics' in item:
+                    key = f'metrics/{item}'
+                elif 'error' in item:
+                    key = f'error/{item}'
 
-            try:
-                s3_client.upload_file(
-                    f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
+                try:
+                    s3_client.upload_file(
+                        f'{LOGS_PATH}/{item}', S3_LOG_BUCKET, key, Config=transfer_config)
+                    log(f'{LOGS_PATH}/{item} uploaded', 'status')
+                except Exception as e:
+                    log(f'error during uploading logs: {str(e)}', 'error')
 
-            except Exception as e:
-                log(f'error during uploading logs: {str(e)}', 'error')
-
-    log(f'finished uploading logs', 'status')
+    log(f'finished logs upload', 'status')
