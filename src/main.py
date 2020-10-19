@@ -611,7 +611,7 @@ def init():
         requeue_failed(None, True)
 
     # start initial downloads, later this is being done by a scheduler
-    queue_files(15)  
+    queue_files()  
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
@@ -620,7 +620,7 @@ def init():
     every(4).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(5).hours.do(queue_files)  
+    every(5).hours.do(run_threaded, queue_files)  
 
     # start the scheduler
     while True:
