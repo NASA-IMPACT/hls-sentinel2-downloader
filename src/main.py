@@ -200,6 +200,10 @@ def requeue_failed(DOWNLOAD_DAY=None, reset_all=False):
             granule.update(in_progress=False, downloaded=False, download_failed=False,
                            uploaded=False).where(granule.download_failed == True).execute()
 
+            # reset orphan (older than 2 days) in_progress files
+            granule.update(in_progress=False).where(granule.in_progress == True).where(
+                granule.download_started <= (date.today() + timedelta(days=-2))).execute()
+
             if reset_all == True:
 
                 # reset failed uploads
@@ -223,6 +227,7 @@ def requeue_failed(DOWNLOAD_DAY=None, reset_all=False):
     except Exception as e:
         log(f"failed resettting download failed flag", "error")
         return False
+
 
 def expire_links(days=None):
     '''
@@ -249,6 +254,7 @@ def expire_links(days=None):
     db_close()
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
+
 
 def queue_files(file_limit=10000):
 
@@ -279,13 +285,12 @@ def queue_files(file_limit=10000):
             .where(granule.uploaded == False)
             .where(granule.download_failed == False)
             .where(granule.expired == False)
-            .where(granule.retry < 100) #give 100 tries to each file
+            .where(granule.retry < 100)  # give 100 tries to each file
             # .limit(file_limit)
         ).order_by(granule.beginposition.asc())  # download oldest available first
-       
 
         pause_download()
-        
+
         log(f"found {query.count()} from the database that can be downloaded", "status")
         log(f"attempting to add {file_limit} files in the download queue", "status")
 
@@ -328,6 +333,7 @@ def queue_files(file_limit=10000):
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
+
 def is_active_url(url):
     '''
         check if already an active url in aria2's download queue
@@ -340,6 +346,7 @@ def is_active_url(url):
                     return True
 
     return False
+
 
 def upload_orphan_downloads():
     '''
@@ -363,6 +370,7 @@ def upload_orphan_downloads():
                 upload_file(file_path)
         except Exception as e:
             log(f'error during running orphan file checker {str(e)}', 'error')
+
 
 def download_file():
     '''
@@ -471,6 +479,7 @@ def download_file():
     if thread_manager.lock.locked_lock() == True:
         thread_manager.lock.release()
 
+
 def do_downloads():
     '''
         if there are less than MAX_CONCURRENT_INTHUB_LIMIT downloads in progress, add one more to aria2 queue
@@ -492,6 +501,7 @@ def do_downloads():
                 download_file_worker.start()
         except Exception as e:
             log(f"error during initiaing downloads:{str(e)}", "status")
+
 
 def check_queues():
     '''
@@ -570,12 +580,14 @@ def check_queues():
 
         remove_file(file_path)
 
+
 def run_threaded(job_func):
     '''
         Helper function to run a job on a thread
     '''
     job_thread = thread_manager.Thread(target=job_func)
     job_thread.start()
+
 
 def upload_existing_files():
     '''
@@ -585,7 +597,7 @@ def upload_existing_files():
     files = glob(f'{DOWNLOADS_PATH}/*.zip')
     for f in files:
         upload_file(f)
-       
+
 
 def init():
     '''
@@ -596,7 +608,7 @@ def init():
     clean_up_downloads()
 
     # expire older links
-    expire_links(days=-4)
+    expire_links(days=-20)
 
     # start the link fetcher
     check_link_fetcher()
@@ -611,7 +623,7 @@ def init():
         requeue_failed(None, True)
 
     # start initial downloads, later this is being done by a scheduler
-    queue_files()  
+    queue_files()
 
     # create scheduled events
     every(1).seconds.do(run_threaded, check_queues)
@@ -620,12 +632,13 @@ def init():
     every(4).hours.do(run_threaded, check_link_fetcher)
     every(24).hours.do(expire_links, days=-20)
     every(1).minutes.do(run_threaded, check_downloads_folder_size)
-    every(5).hours.do(run_threaded, queue_files)  
+    every(5).hours.do(run_threaded, queue_files)
 
     # start the scheduler
     while True:
         run_pending()
         sleep(1)
+
 
 # check if any previous instance is already running
 if file_is_locked():

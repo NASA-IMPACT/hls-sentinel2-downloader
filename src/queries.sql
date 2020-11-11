@@ -13,10 +13,13 @@ select count(*),CAST(beginposition as DATE) as start_date from granule where exp
 update granule set expired=false  where beginposition <= CONVERT_TZ(date_sub(now(),interval 21 day)
 
 #unexpire links older than given days
-update granule set expired=false  where beginposition > CONVERT_TZ(date_sub(now(),interval 5 day), 'UTC', 'America/Chicago' )
+update granule set expired=false  where beginposition > CONVERT_TZ(date_sub(now(),interval 10 day), 'UTC', 'America/Chicago' )
 
 #find  unexpired links older than 21 days
 select * from granule where expired=false and beginposition > CONVERT_TZ(date_sub(now(),interval 21 day), 'UTC', 'America/Chicago' )
+
+#find  unexpired links older than 21 days, show grouped by date
+select count(*), CAST(beginposition as DATE)  from granule where expired=false and beginposition > CONVERT_TZ(date_sub(now(),interval 21 day), 'UTC', 'America/Chicago' ) group by CAST(beginposition as DATE);
 
 #count files by date
 select count(*) from granule where CAST(beginposition as DATE) = '2020-06-03'
@@ -25,7 +28,13 @@ select count(*) from granule where CAST(beginposition as DATE) = '2020-06-03'
 select * from granule where CAST(beginposition as DATE) = '2020-08-04'
 
 #get files by date which are not uploaded and which are not expired
-select * from granule where CAST(beginposition as DATE) = '2020-08-03' and ignore_file = False and uploaded= FALSE and expired = False
+select * from granule where CAST(beginposition as DATE) = '2020-10-30' and ignore_file = False and uploaded= FALSE and expired = False
+
+#get files which are still in progress from last 2 days, their in_progress flag needs to be reset
+select CAST(beginposition as DATE), count(*) from granule where ignore_file = False and in_progress = True and download_started <= CONVERT_TZ(date_sub(now(),interval 2 day), 'UTC', 'America/Chicago' ) group by CAST(beginposition as DATE)
+
+#reset the in_progress flag of orphan downloads
+update granule set in_progress = FALSE where ignore_file = False and in_progress = True and download_started <= CONVERT_TZ(date_sub(now(),interval 2 day), 'UTC', 'America/Chicago' )
 
 #group files by date
 select count(*) from granule group by CAST(beginposition as DATE) ;
@@ -46,7 +55,7 @@ select filename,download_url,beginposition from granule where CAST(beginposition
 #get size downloaded per day
 select sum(size)/(1024*1024*1024) as "Downloads (GB)", CAST(download_finished as DATE ) from granule group by CAST(download_finished as DATE )
 
-#to find days where available == uploaded
+#to find days where available == uploaded (most used query)
 select T1.Available,T2.Uploaded,T1.date from (select count(*) as "Available", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select count(*) as "Uploaded", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
 where T1.date = T2.date;
 
@@ -62,6 +71,9 @@ select count(*) from granule
 
 #find data downloaded in last 10 minutes
 select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 10 minute), 'UTC', 'America/Chicago' ) group by CAST(beginposition AS DATE)
+
+#find data downloaded in last 1 hour
+select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 1 hour), 'UTC', 'America/Chicago' ) group by CAST(beginposition AS DATE)
 
 #find data downloaded in last 12 hours
 select CAST(beginposition AS DATE), count(*), sum(size) / (1024 * 1024 * 1024) AS "Total Downloaded (GB)" from granule where uploaded=True AND download_finished >= CONVERT_TZ(date_sub(now(),interval 12 hour), 'UTC', 'America/Chicago' ) group by CAST(beginposition AS DATE)
