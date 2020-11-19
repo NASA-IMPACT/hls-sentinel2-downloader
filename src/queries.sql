@@ -55,7 +55,7 @@ select filename,download_url,beginposition from granule where CAST(beginposition
 #get size downloaded per day
 select sum(size)/(1024*1024*1024) as "Downloads (GB)", CAST(download_finished as DATE ) from granule group by CAST(download_finished as DATE )
 
-#to find days where available == uploaded (most used query)
+#to find days where available == uploaded (2nd most used query)
 select T1.Available,T2.Uploaded,T1.date from (select count(*) as "Available", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select count(*) as "Uploaded", CAST(beginposition as DATE) as "date" from granule where uploaded=True  AND ignore_file=False  group by CAST(beginposition as DATE)) T2
 where T1.date = T2.date;
 
@@ -101,3 +101,7 @@ select * from granule where filename LIKE "%S2B_MSIL1C_20201003T220539_N0209_R07
 
 #find granules with download urls more than 5 days old not yet uploaded
 select *, CAST(beginposition as DATE)  from granule where expired=false and ignore_file=false and uploaded=false and beginposition > CONVERT_TZ(date_sub(now(),interval 21 day), 'UTC', 'America/Chicago' ) and beginposition < CONVERT_TZ(date_sub(now(),interval 5 day), 'UTC', 'America/Chicago' ) order by CAST(ingestiondate as DATE);
+
+#similar to inventory search above, but this checks status of last 21 days worth of downloads (most used query)
+select T1.Available,T2.Uploaded,T1.date from (select count(*) as "Available", CAST(beginposition as DATE) as "date" from granule where ignore_file=False  group by CAST(beginposition as DATE )) T1 JOIN (select count(*) as "Uploaded", CAST(beginposition as DATE) as "date" from granule where uploaded=True AND beginposition > CAST(date_sub(now(),interval 21 day) - curtime() as DATETIME) AND ignore_file=False  group by CAST(beginposition as DATE)) T2
+where T1.date = T2.date;
