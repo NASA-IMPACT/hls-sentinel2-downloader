@@ -98,3 +98,6 @@ SELECT table_schema, ROUND(SUM(data_length+index_length)/1024/1024/1024,2) "size
 
 #find a granule by name
 select * from granule where filename LIKE "%S2B_MSIL1C_20201003T220539_N0209_R072_T04VCK_20201003T223152%"
+
+#find granules with download urls more than 5 days old not yet uploaded
+select *, CAST(beginposition as DATE)  from granule where expired=false and ignore_file=false and uploaded=false and beginposition > CONVERT_TZ(date_sub(now(),interval 21 day), 'UTC', 'America/Chicago' ) and beginposition < CONVERT_TZ(date_sub(now(),interval 5 day), 'UTC', 'America/Chicago' ) order by CAST(ingestiondate as DATE);
